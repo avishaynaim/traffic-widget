@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Kotlin
+*.kotlin_module
+
+# Secrets - DO NOT COMMIT
+google-services.json
+**/secrets/
+*.keystore
+*.jks
+
+# Build outputs
+app/build/
