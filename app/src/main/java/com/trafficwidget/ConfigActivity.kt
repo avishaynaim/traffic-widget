@@ -17,9 +17,11 @@ import java.net.URL
 import java.net.URLEncoder
 
 class ConfigActivity : AppCompatActivity() {
-    
+
     private lateinit var binding: ActivityConfigBinding
-    
+    private var appWidgetId = android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+    private var isWidgetConfiguration = false
+
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -38,9 +40,23 @@ class ConfigActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Set result to CANCELED initially. If user backs out, widget won't be added
+        setResult(RESULT_CANCELED)
+
+        // Check if this is widget configuration or just settings
+        val extras = intent.extras
+        if (extras != null) {
+            appWidgetId = extras.getInt(
+                android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID,
+                android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+            )
+        }
+        isWidgetConfiguration = appWidgetId != android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+
         binding = ActivityConfigBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        
+
         loadSettings()
         setupClickListeners()
         checkPermissions()
@@ -117,7 +133,7 @@ class ConfigActivity : AppCompatActivity() {
             val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
             val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
             val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
-            
+
             when {
                 apiKey.isNullOrEmpty() -> {
                     Toast.makeText(this, "Please set API key first", Toast.LENGTH_SHORT).show()
@@ -126,8 +142,37 @@ class ConfigActivity : AppCompatActivity() {
                     Toast.makeText(this, "Please set home address first", Toast.LENGTH_SHORT).show()
                 }
                 else -> {
-                    Toast.makeText(this, "Testing traffic check...", Toast.LENGTH_SHORT).show()
+                    // Show testing message
+                    Toast.makeText(this, "Testing traffic check... Check widget in 10-15 seconds", Toast.LENGTH_LONG).show()
                     TrafficCheckWorker.enqueueNow(this)
+
+                    // Show a dialog with status after a delay
+                    lifecycleScope.launch {
+                        kotlinx.coroutines.delay(15000) // Wait 15 seconds for worker to complete
+                        val lastError = prefs.getString(TrafficWidgetProvider.KEY_LAST_ERROR, null)
+                        val lastUpdate = prefs.getLong(TrafficWidgetProvider.KEY_LAST_UPDATE, 0)
+                        val trafficStatus = prefs.getInt(TrafficWidgetProvider.KEY_LAST_TRAFFIC_STATUS, -1)
+
+                        val message = if (lastError != null) {
+                            "❌ Test Failed:\n$lastError"
+                        } else if (trafficStatus >= 0 && lastUpdate > 0) {
+                            val status = when (trafficStatus) {
+                                1 -> "🟢 GREEN - Clear roads"
+                                2 -> "🟡 YELLOW - Moderate traffic"
+                                3 -> "🔴 RED - Heavy traffic"
+                                else -> "⚪ UNKNOWN"
+                            }
+                            "✅ Test Successful!\nStatus: $status\n\nCheck your home screen widget!"
+                        } else {
+                            "⏳ Test in progress...\nCheck widget on home screen"
+                        }
+
+                        androidx.appcompat.app.AlertDialog.Builder(this@ConfigActivity)
+                            .setTitle("Test Results")
+                            .setMessage(message)
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
                 }
             }
         }
@@ -210,11 +255,39 @@ class ConfigActivity : AppCompatActivity() {
             .putString(TrafficWidgetProvider.KEY_HOME_LNG, lng)
             .putString(TrafficWidgetProvider.KEY_HOME_ADDRESS, address)
             .apply()
-        
+
         binding.coordinatesText.text = "📍 $lat, $lng"
-        
+
         // Trigger immediate traffic check
         TrafficCheckWorker.enqueueNow(this)
+
+        // If this is widget configuration, finish and add widget
+        if (isWidgetConfiguration) {
+            finishWidgetConfiguration()
+        }
+    }
+
+    private fun finishWidgetConfiguration() {
+        // Check if we have minimum configuration
+        val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+        val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+        val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
+
+        if (apiKey.isNullOrEmpty() || homeLat.isNullOrEmpty()) {
+            Toast.makeText(this, "Please complete setup: API key and home address required", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Update the widget
+        val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(this)
+        TrafficWidgetProvider.updateWidget(this, appWidgetManager, appWidgetId)
+
+        // Return result
+        val resultValue = android.content.Intent().apply {
+            putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        setResult(RESULT_OK, resultValue)
+        finish()
     }
     
     private fun checkPermissions() {
