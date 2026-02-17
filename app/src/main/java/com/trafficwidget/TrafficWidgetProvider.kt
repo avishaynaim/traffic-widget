@@ -210,7 +210,6 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.settingsButton, configPending)
 
                 appWidgetManager.updateAppWidget(appWidgetId, views)
-                */
             } catch (e: Exception) {
                 android.util.Log.e("TrafficWidget", "Error updating widget", e)
                 // Create a simple error view
