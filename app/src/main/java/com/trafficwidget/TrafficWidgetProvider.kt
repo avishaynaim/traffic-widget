@@ -101,6 +101,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val KEY_LAST_DURATION = "last_duration"
         const val KEY_LAST_DURATION_TRAFFIC = "last_duration_traffic"
         const val KEY_LAST_UPDATE = "last_update"
+        const val KEY_LAST_ERROR = "last_error"
         
         const val ACTION_REFRESH = "com.trafficwidget.ACTION_REFRESH"
         const val ACTION_OPEN_WAZE = "com.trafficwidget.ACTION_OPEN_WAZE"
@@ -120,6 +121,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             val duration = prefs.getInt(KEY_LAST_DURATION, 0)
             val durationTraffic = prefs.getInt(KEY_LAST_DURATION_TRAFFIC, 0)
             val lastUpdate = prefs.getLong(KEY_LAST_UPDATE, 0)
+            val lastError = prefs.getString(KEY_LAST_ERROR, null)
 
             val views = RemoteViews(context.packageName, R.layout.widget_traffic)
             
@@ -136,11 +138,15 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.statusEmoji, emoji)
             views.setTextViewText(R.id.statusLabel, label)
             
-            // Show travel time info
-            if (durationTraffic > 0) {
+            // Show travel time info or error
+            if (!lastError.isNullOrEmpty()) {
+                // Show error state
+                views.setTextViewText(R.id.travelTime, "Error")
+                views.setTextViewText(R.id.delayInfo, lastError)
+            } else if (durationTraffic > 0) {
                 val minutes = durationTraffic / 60
                 views.setTextViewText(R.id.travelTime, "${minutes} min")
-                
+
                 // Show delay if any
                 val delay = (durationTraffic - duration) / 60
                 if (delay > 0) {

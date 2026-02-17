@@ -108,11 +108,16 @@
         <!-- Delay info -->
         <TextView
             android:id="@+id/delayInfo"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Tap to configure"
             android:textSize="12sp"
-            android:textColor="#B0FFFFFF" />
+            android:textColor="#B0FFFFFF"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
     </LinearLayout>
 
     <!-- Footer with last update time -->

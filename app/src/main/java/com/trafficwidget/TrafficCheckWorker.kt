@@ -43,6 +43,11 @@ class TrafficCheckWorker(
                 val currentLocation = getCurrentLocation()
                 if (currentLocation == null) {
                     Log.w(TAG, "Could not get current location")
+                    prefs.edit()
+                        .putString(TrafficWidgetProvider.KEY_LAST_ERROR, "Cannot get location. Check permissions.")
+                        .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
+                        .apply()
+                    TrafficWidgetProvider.updateAllWidgets(context)
                     return@withContext Result.retry()
                 }
                 
@@ -63,25 +68,47 @@ class TrafficCheckWorker(
                         ratio < TrafficWidgetProvider.THRESHOLD_YELLOW -> TrafficStatus.YELLOW
                         else -> TrafficStatus.RED
                     }
-                    
+
                     Log.i(TAG, "Traffic ratio: $ratio, status: $status")
                     Log.i(TAG, "Normal: ${trafficData.duration/60}min, With traffic: ${trafficData.durationInTraffic/60}min")
-                    
-                    // Save to prefs
+
+                    // Save to prefs and clear any previous errors
                     prefs.edit()
                         .putInt(TrafficWidgetProvider.KEY_LAST_TRAFFIC_STATUS, status.ordinal)
                         .putInt(TrafficWidgetProvider.KEY_LAST_DURATION, trafficData.duration)
                         .putInt(TrafficWidgetProvider.KEY_LAST_DURATION_TRAFFIC, trafficData.durationInTraffic)
                         .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
+                        .remove(TrafficWidgetProvider.KEY_LAST_ERROR)  // Clear error on success
                         .apply()
-                    
+
                     // Update widget
+                    TrafficWidgetProvider.updateAllWidgets(context)
+                } else {
+                    // Traffic data fetch failed - error already saved in fetchTrafficData
                     TrafficWidgetProvider.updateAllWidgets(context)
                 }
                 
                 Result.success()
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking traffic", e)
+
+                // Save error for user visibility
+                val prefs = context.getSharedPreferences(
+                    TrafficWidgetProvider.PREFS_NAME,
+                    Context.MODE_PRIVATE
+                )
+                val errorMsg = when (e) {
+                    is java.net.UnknownHostException -> "No internet connection"
+                    is java.net.SocketTimeoutException -> "Request timeout"
+                    is SecurityException -> "Location permission denied"
+                    else -> "Error: ${e.message ?: "Unknown error"}"
+                }
+                prefs.edit()
+                    .putString(TrafficWidgetProvider.KEY_LAST_ERROR, errorMsg)
+                    .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
+                    .apply()
+                TrafficWidgetProvider.updateAllWidgets(context)
+
                 Result.retry()
             }
         }
@@ -185,6 +212,23 @@ class TrafficCheckWorker(
             if (responseCode != 200) {
                 val errorStream = connection.errorStream?.bufferedReader()?.readText()
                 Log.e(TAG, "Routes API error $responseCode: $errorStream")
+
+                // Parse error message and save to prefs for user visibility
+                try {
+                    val errorJson = JSONObject(errorStream ?: "{}")
+                    val errorMessage = errorJson.optJSONObject("error")?.optString("message", "Unknown error")
+                    val prefs = context.getSharedPreferences(
+                        TrafficWidgetProvider.PREFS_NAME,
+                        Context.MODE_PRIVATE
+                    )
+                    prefs.edit()
+                        .putString(TrafficWidgetProvider.KEY_LAST_ERROR, "API Error: $errorMessage")
+                        .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
+                        .apply()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse error", e)
+                }
+
                 return@withContext null
             }
             
@@ -193,9 +237,17 @@ class TrafficCheckWorker(
             
             val json = JSONObject(response)
             val routes = json.optJSONArray("routes")
-            
+
             if (routes == null || routes.length() == 0) {
                 Log.w(TAG, "No routes found")
+                val prefs = context.getSharedPreferences(
+                    TrafficWidgetProvider.PREFS_NAME,
+                    Context.MODE_PRIVATE
+                )
+                prefs.edit()
+                    .putString(TrafficWidgetProvider.KEY_LAST_ERROR, "No route found to destination")
+                    .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
+                    .apply()
                 return@withContext null
             }
             

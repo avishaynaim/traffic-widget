@@ -106,9 +106,8 @@ class ConfigActivity : AppCompatActivity() {
                 if (result != null) {
                     saveHomeLocation(result.first, result.second, address)
                     Toast.makeText(this@ConfigActivity, "Home location saved!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@ConfigActivity, "Could not find address", Toast.LENGTH_SHORT).show()
                 }
+                // Error message already shown in geocodeAddress function
                 binding.saveAddressButton.isEnabled = true
                 binding.saveAddressButton.text = "Save Address"
             }
@@ -143,27 +142,62 @@ class ConfigActivity : AppCompatActivity() {
             try {
                 val encodedAddress = URLEncoder.encode(address, "UTF-8")
                 val url = URL("https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey")
-                val response = url.readText()
+                val connection = url.openConnection()
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                val response = connection.getInputStream().bufferedReader().readText()
                 val json = JSONObject(response)
-                
-                if (json.getString("status") != "OK") {
+
+                val status = json.getString("status")
+                if (status != "OK") {
+                    // Show specific error message
+                    val errorMessage = when (status) {
+                        "REQUEST_DENIED" -> {
+                            val error = json.optString("error_message", "API request denied. Check if Geocoding API is enabled.")
+                            android.util.Log.e("ConfigActivity", "Geocoding error: $error")
+                            error
+                        }
+                        "ZERO_RESULTS" -> "Address not found. Please try a different address."
+                        "OVER_QUERY_LIMIT" -> "API quota exceeded. Please try again later."
+                        "INVALID_REQUEST" -> "Invalid address format."
+                        else -> "Error: $status"
+                    }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ConfigActivity, errorMessage, Toast.LENGTH_LONG).show()
+                    }
                     return@withContext null
                 }
-                
+
                 val results = json.getJSONArray("results")
                 if (results.length() == 0) {
                     return@withContext null
                 }
-                
+
                 val location = results.getJSONObject(0)
                     .getJSONObject("geometry")
                     .getJSONObject("location")
-                
+
                 val lat = location.getDouble("lat").toString()
                 val lng = location.getDouble("lng").toString()
-                
+
                 Pair(lat, lng)
+            } catch (e: java.net.UnknownHostException) {
+                android.util.Log.e("ConfigActivity", "Network error", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ConfigActivity, "Network error. Check your internet connection.", Toast.LENGTH_LONG).show()
+                }
+                null
+            } catch (e: java.net.SocketTimeoutException) {
+                android.util.Log.e("ConfigActivity", "Timeout error", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ConfigActivity, "Request timeout. Please try again.", Toast.LENGTH_LONG).show()
+                }
+                null
             } catch (e: Exception) {
+                android.util.Log.e("ConfigActivity", "Geocoding error", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ConfigActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                }
                 null
             }
         }
