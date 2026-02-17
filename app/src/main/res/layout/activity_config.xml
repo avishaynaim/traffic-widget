@@ -163,7 +163,8 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/testButton"
@@ -182,6 +183,16 @@
                 android:text="❓ Help"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
         </LinearLayout>
+
+        <!-- DONE Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/doneButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="✅ DONE"
+            android:textSize="16sp"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp" />
 
         <!-- Info box -->
         <TextView

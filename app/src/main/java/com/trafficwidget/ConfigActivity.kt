@@ -185,6 +185,12 @@ class ConfigActivity : AppCompatActivity() {
         binding.helpButton.setOnClickListener {
             showHelpDialog()
         }
+
+        binding.doneButton.setOnClickListener {
+            // Simply close the activity
+            Toast.makeText(this, "✅ Configuration saved!", Toast.LENGTH_SHORT).show()
+            finish()
+        }
     }
     
     private suspend fun geocodeAddress(address: String, apiKey: String): Pair<String, String>? {
