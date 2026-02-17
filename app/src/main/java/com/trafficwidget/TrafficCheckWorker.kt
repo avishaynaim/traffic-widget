@@ -15,6 +15,7 @@ import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class TrafficCheckWorker(
@@ -172,13 +173,13 @@ class TrafficCheckWorker(
     private suspend fun geocodeAddress(address: String, apiKey: String): Pair<Double, Double>? {
         return withContext(Dispatchers.IO) {
             try {
-                val encodedAddress = java.net.URLEncoder.encode(address, "UTF-8")
-                val url = java.net.URL("https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey")
+                val encodedAddress = URLEncoder.encode(address, "UTF-8")
+                val url = URL("https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey")
                 val connection = url.openConnection()
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
                 val response = connection.getInputStream().bufferedReader().readText()
-                val json = org.json.JSONObject(response)
+                val json = JSONObject(response)
 
                 val status = json.getString("status")
                 if (status != "OK") {
