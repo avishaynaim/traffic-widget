@@ -280,12 +280,17 @@ class ConfigActivity : AppCompatActivity() {
 
         if (!apiKey.isNullOrEmpty() && !homeLat.isNullOrEmpty()) {
             // Already configured! Show message and auto-finish after short delay
-            Toast.makeText(this, "✅ Already configured! Adding widget...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "✅ Already configured! Adding widget...", Toast.LENGTH_LONG).show()
 
             // Delay slightly so user sees the message
             binding.root.postDelayed({
-                finishWidgetConfiguration()
-            }, 1000)
+                try {
+                    finishWidgetConfiguration()
+                } catch (e: Exception) {
+                    android.util.Log.e("ConfigActivity", "Error finishing widget config", e)
+                    Toast.makeText(this, "Error adding widget: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }, 1500)
         } else {
             // Not configured, show message
             Toast.makeText(this, "Please configure API key and home address", Toast.LENGTH_LONG).show()
@@ -293,26 +298,41 @@ class ConfigActivity : AppCompatActivity() {
     }
 
     private fun finishWidgetConfiguration() {
-        // Check if we have minimum configuration
-        val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-        val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
-        val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
+        try {
+            // Check if we have minimum configuration
+            val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+            val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
 
-        if (apiKey.isNullOrEmpty() || homeLat.isNullOrEmpty()) {
-            Toast.makeText(this, "Please complete setup: API key and home address required", Toast.LENGTH_LONG).show()
-            return
+            if (apiKey.isNullOrEmpty() || homeLat.isNullOrEmpty()) {
+                Toast.makeText(this, "Please complete setup: API key and home address required", Toast.LENGTH_LONG).show()
+                return
+            }
+
+            android.util.Log.d("ConfigActivity", "Finishing widget config for ID: $appWidgetId")
+
+            // Update the widget
+            val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(this)
+            TrafficWidgetProvider.updateWidget(this, appWidgetManager, appWidgetId)
+
+            // Return result
+            val resultValue = android.content.Intent().apply {
+                putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            setResult(RESULT_OK, resultValue)
+
+            android.util.Log.d("ConfigActivity", "Widget configuration completed successfully")
+            finish()
+        } catch (e: Exception) {
+            android.util.Log.e("ConfigActivity", "Error in finishWidgetConfiguration", e)
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            // Still try to finish with OK result
+            val resultValue = android.content.Intent().apply {
+                putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            setResult(RESULT_OK, resultValue)
+            finish()
         }
-
-        // Update the widget
-        val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(this)
-        TrafficWidgetProvider.updateWidget(this, appWidgetManager, appWidgetId)
-
-        // Return result
-        val resultValue = android.content.Intent().apply {
-            putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-        }
-        setResult(RESULT_OK, resultValue)
-        finish()
     }
     
     override fun onBackPressed() {

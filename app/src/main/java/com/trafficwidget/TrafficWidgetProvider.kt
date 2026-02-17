@@ -116,14 +116,15 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int
         ) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val trafficStatus = prefs.getInt(KEY_LAST_TRAFFIC_STATUS, TrafficStatus.UNKNOWN.ordinal)
-            val duration = prefs.getInt(KEY_LAST_DURATION, 0)
-            val durationTraffic = prefs.getInt(KEY_LAST_DURATION_TRAFFIC, 0)
-            val lastUpdate = prefs.getLong(KEY_LAST_UPDATE, 0)
-            val lastError = prefs.getString(KEY_LAST_ERROR, null)
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val trafficStatus = prefs.getInt(KEY_LAST_TRAFFIC_STATUS, TrafficStatus.UNKNOWN.ordinal)
+                val duration = prefs.getInt(KEY_LAST_DURATION, 0)
+                val durationTraffic = prefs.getInt(KEY_LAST_DURATION_TRAFFIC, 0)
+                val lastUpdate = prefs.getLong(KEY_LAST_UPDATE, 0)
+                val lastError = prefs.getString(KEY_LAST_ERROR, null)
 
-            val views = RemoteViews(context.packageName, R.layout.widget_traffic)
+                val views = RemoteViews(context.packageName, R.layout.widget_traffic)
             
             // Set gauge color based on traffic status
             val status = TrafficStatus.values()[trafficStatus]
@@ -193,7 +194,20 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.settingsButton, configPending)
 
-            appWidgetManager.updateAppWidget(appWidgetId, views)
+                appWidgetManager.updateAppWidget(appWidgetId, views)
+            } catch (e: Exception) {
+                android.util.Log.e("TrafficWidget", "Error updating widget", e)
+                // Create a simple error view
+                try {
+                    val errorViews = RemoteViews(context.packageName, R.layout.widget_traffic)
+                    errorViews.setTextViewText(R.id.statusLabel, "Error")
+                    errorViews.setTextViewText(R.id.travelTime, "!")
+                    errorViews.setTextViewText(R.id.delayInfo, "Tap settings to configure")
+                    appWidgetManager.updateAppWidget(appWidgetId, errorViews)
+                } catch (e2: Exception) {
+                    android.util.Log.e("TrafficWidget", "Failed to show error view", e2)
+                }
+            }
         }
 
         fun updateAllWidgets(context: Context) {
