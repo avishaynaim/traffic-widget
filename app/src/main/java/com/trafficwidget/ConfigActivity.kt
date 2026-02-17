@@ -60,6 +60,11 @@ class ConfigActivity : AppCompatActivity() {
         loadSettings()
         setupClickListeners()
         checkPermissions()
+
+        // If widget configuration and already configured, auto-finish
+        if (isWidgetConfiguration) {
+            checkAndAutoFinishConfiguration()
+        }
     }
     
     private fun loadSettings() {
@@ -267,6 +272,26 @@ class ConfigActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkAndAutoFinishConfiguration() {
+        // Check if already configured
+        val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+        val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+        val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
+
+        if (!apiKey.isNullOrEmpty() && !homeLat.isNullOrEmpty()) {
+            // Already configured! Show message and auto-finish after short delay
+            Toast.makeText(this, "✅ Already configured! Adding widget...", Toast.LENGTH_SHORT).show()
+
+            // Delay slightly so user sees the message
+            binding.root.postDelayed({
+                finishWidgetConfiguration()
+            }, 1000)
+        } else {
+            // Not configured, show message
+            Toast.makeText(this, "Please configure API key and home address", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun finishWidgetConfiguration() {
         // Check if we have minimum configuration
         val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
@@ -290,6 +315,23 @@ class ConfigActivity : AppCompatActivity() {
         finish()
     }
     
+    override fun onBackPressed() {
+        // If widget configuration and configured, finish properly
+        if (isWidgetConfiguration) {
+            val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+            val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
+
+            if (!apiKey.isNullOrEmpty() && !homeLat.isNullOrEmpty()) {
+                // Configured - add the widget
+                finishWidgetConfiguration()
+                return
+            }
+        }
+        // Not configured or not widget config - just close
+        super.onBackPressed()
+    }
+
     private fun checkPermissions() {
         when {
             ContextCompat.checkSelfPermission(
