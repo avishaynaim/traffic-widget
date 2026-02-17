@@ -8,7 +8,6 @@
     android:minResizeHeight="110dp"
     android:updatePeriodMillis="900000"
     android:initialLayout="@layout/widget_traffic"
-    android:configure="com.trafficwidget.ConfigActivity"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:previewImage="@drawable/widget_preview"
