@@ -46,7 +46,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Required for traffic data. Get one from Google Cloud Console."
+                    android:text="Enable 'Routes API' + 'Geocoding API' in Google Cloud Console"
                     android:textSize="12sp"
                     android:textColor="#666666"
                     android:layout_marginBottom="8dp" />
@@ -97,44 +97,33 @@
                     android:layout_marginBottom="8dp" />
 
                 <TextView
+                    android:id="@+id/coordinatesText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Current home:"
-                    android:textSize="12sp"
-                    android:textColor="#666666" />
-
-                <TextView
-                    android:id="@+id/homeAddressText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Not set"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:padding="8dp"
-                    android:background="#F5F5F5"
-                    android:layout_marginBottom="12dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Search for your home address:"
+                    android:text="📍 Not set"
                     android:textSize="12sp"
                     android:textColor="#666666"
-                    android:layout_marginBottom="4dp" />
+                    android:layout_marginBottom="8dp" />
 
-                <!-- Places Autocomplete Fragment -->
-                <FrameLayout
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:background="#FAFAFA">
+                    android:hint="Enter your home address">
 
-                    <fragment
-                        android:id="@+id/autocomplete_fragment"
-                        android:name="com.google.android.libraries.places.widget.AutocompleteSupportFragment"
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/homeAddressInput"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
-                </FrameLayout>
+                        android:layout_height="wrap_content"
+                        android:inputType="textPostalAddress"
+                        android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/saveAddressButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Save Address"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

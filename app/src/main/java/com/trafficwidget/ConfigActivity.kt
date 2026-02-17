@@ -7,12 +7,14 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.google.android.gms.common.api.Status
-import com.google.android.libraries.places.api.Places
-import com.google.android.libraries.places.api.model.Place
-import com.google.android.libraries.places.widget.AutocompleteSupportFragment
-import com.google.android.libraries.places.widget.listener.PlaceSelectionListener
+import androidx.lifecycle.lifecycleScope
 import com.trafficwidget.databinding.ActivityConfigBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.URL
+import java.net.URLEncoder
 
 class ConfigActivity : AppCompatActivity() {
     
@@ -40,7 +42,6 @@ class ConfigActivity : AppCompatActivity() {
         setContentView(binding.root)
         
         loadSettings()
-        setupPlacesAutocomplete()
         setupClickListeners()
         checkPermissions()
     }
@@ -49,76 +50,20 @@ class ConfigActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
         
         binding.apiKeyInput.setText(prefs.getString(TrafficWidgetProvider.KEY_API_KEY, ""))
-        binding.homeAddressText.text = prefs.getString(TrafficWidgetProvider.KEY_HOME_ADDRESS, "Not set")
+        binding.homeAddressInput.setText(prefs.getString(TrafficWidgetProvider.KEY_HOME_ADDRESS, ""))
+        
+        val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, null)
+        val homeLng = prefs.getString(TrafficWidgetProvider.KEY_HOME_LNG, null)
+        if (homeLat != null && homeLng != null) {
+            binding.coordinatesText.text = "📍 $homeLat, $homeLng"
+        } else {
+            binding.coordinatesText.text = "📍 Not set"
+        }
         
         // Load threshold values
         val greenThreshold = ((TrafficWidgetProvider.THRESHOLD_GREEN - 1) * 100).toInt()
         val yellowThreshold = ((TrafficWidgetProvider.THRESHOLD_YELLOW - 1) * 100).toInt()
-        binding.thresholdInfo.text = "🟢 Green: <${greenThreshold}% delay\n🟡 Yellow: <${yellowThreshold}% delay\n🔴 Red: >${yellowThreshold}% delay"
-    }
-    
-    private fun setupPlacesAutocomplete() {
-        val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-        val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
-        
-        if (!apiKey.isNullOrEmpty()) {
-            initializePlaces(apiKey)
-        }
-    }
-    
-    private fun initializePlaces(apiKey: String) {
-        if (!Places.isInitialized()) {
-            Places.initialize(applicationContext, apiKey)
-        }
-        
-        val autocompleteFragment = supportFragmentManager.findFragmentById(R.id.autocomplete_fragment)
-                as? AutocompleteSupportFragment
-        
-        autocompleteFragment?.apply {
-            setPlaceFields(listOf(
-                Place.Field.ID,
-                Place.Field.NAME,
-                Place.Field.ADDRESS,
-                Place.Field.LAT_LNG
-            ))
-            setHint("Search for your home address")
-            
-            setOnPlaceSelectedListener(object : PlaceSelectionListener {
-                override fun onPlaceSelected(place: Place) {
-                    val latLng = place.latLng
-                    if (latLng != null) {
-                        saveHomeLocation(
-                            lat = latLng.latitude.toString(),
-                            lng = latLng.longitude.toString(),
-                            address = place.address ?: place.name ?: "Home"
-                        )
-                    }
-                }
-                
-                override fun onError(status: Status) {
-                    Toast.makeText(
-                        this@ConfigActivity,
-                        "Error: ${status.statusMessage}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            })
-        }
-    }
-    
-    private fun saveHomeLocation(lat: String, lng: String, address: String) {
-        val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-        prefs.edit()
-            .putString(TrafficWidgetProvider.KEY_HOME_LAT, lat)
-            .putString(TrafficWidgetProvider.KEY_HOME_LNG, lng)
-            .putString(TrafficWidgetProvider.KEY_HOME_ADDRESS, address)
-            .apply()
-        
-        binding.homeAddressText.text = address
-        Toast.makeText(this, "Home location saved!", Toast.LENGTH_SHORT).show()
-        
-        // Trigger immediate traffic check
-        TrafficCheckWorker.enqueueNow(this)
+        binding.thresholdInfo.text = "🟢 Green: <${greenThreshold}% delay\n🟡 Yellow: ${greenThreshold}-${yellowThreshold}% delay\n🔴 Red: >${yellowThreshold}% delay"
     }
     
     private fun setupClickListeners() {
@@ -135,9 +80,38 @@ class ConfigActivity : AppCompatActivity() {
                 .apply()
             
             Toast.makeText(this, "API key saved!", Toast.LENGTH_SHORT).show()
+        }
+        
+        binding.saveAddressButton.setOnClickListener {
+            val address = binding.homeAddressInput.text.toString().trim()
+            val apiKey = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+                .getString(TrafficWidgetProvider.KEY_API_KEY, "")
             
-            // Initialize Places with new key
-            initializePlaces(apiKey)
+            if (address.isEmpty()) {
+                Toast.makeText(this, "Please enter an address", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
+            if (apiKey.isNullOrEmpty()) {
+                Toast.makeText(this, "Please set API key first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
+            // Geocode the address
+            binding.saveAddressButton.isEnabled = false
+            binding.saveAddressButton.text = "Looking up..."
+            
+            lifecycleScope.launch {
+                val result = geocodeAddress(address, apiKey)
+                if (result != null) {
+                    saveHomeLocation(result.first, result.second, address)
+                    Toast.makeText(this@ConfigActivity, "Home location saved!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@ConfigActivity, "Could not find address", Toast.LENGTH_SHORT).show()
+                }
+                binding.saveAddressButton.isEnabled = true
+                binding.saveAddressButton.text = "Save Address"
+            }
         }
         
         binding.testButton.setOnClickListener {
@@ -162,6 +136,51 @@ class ConfigActivity : AppCompatActivity() {
         binding.helpButton.setOnClickListener {
             showHelpDialog()
         }
+    }
+    
+    private suspend fun geocodeAddress(address: String, apiKey: String): Pair<String, String>? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val encodedAddress = URLEncoder.encode(address, "UTF-8")
+                val url = URL("https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey")
+                val response = url.readText()
+                val json = JSONObject(response)
+                
+                if (json.getString("status") != "OK") {
+                    return@withContext null
+                }
+                
+                val results = json.getJSONArray("results")
+                if (results.length() == 0) {
+                    return@withContext null
+                }
+                
+                val location = results.getJSONObject(0)
+                    .getJSONObject("geometry")
+                    .getJSONObject("location")
+                
+                val lat = location.getDouble("lat").toString()
+                val lng = location.getDouble("lng").toString()
+                
+                Pair(lat, lng)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+    
+    private fun saveHomeLocation(lat: String, lng: String, address: String) {
+        val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+        prefs.edit()
+            .putString(TrafficWidgetProvider.KEY_HOME_LAT, lat)
+            .putString(TrafficWidgetProvider.KEY_HOME_LNG, lng)
+            .putString(TrafficWidgetProvider.KEY_HOME_ADDRESS, address)
+            .apply()
+        
+        binding.coordinatesText.text = "📍 $lat, $lng"
+        
+        // Trigger immediate traffic check
+        TrafficCheckWorker.enqueueNow(this)
     }
     
     private fun checkPermissions() {
@@ -190,12 +209,12 @@ class ConfigActivity : AppCompatActivity() {
                 1. Get a Google Maps API key:
                    • Go to console.cloud.google.com
                    • Create a project
-                   • Enable "Directions API" and "Places API"
+                   • Enable "Routes API" and "Geocoding API"
                    • Create an API key
                    
                 2. Enter your API key above
                 
-                3. Search for your home address
+                3. Type your home address and save
                 
                 4. Add the widget to your home screen
                 

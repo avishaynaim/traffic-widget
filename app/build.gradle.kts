@@ -55,9 +55,6 @@ dependencies {
     // Google Play Services - Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
     
-    // Google Places API (for address autocomplete)
-    implementation("com.google.android.libraries.places:places:3.3.0")
-    
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")

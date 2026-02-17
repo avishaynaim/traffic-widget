@@ -10,7 +10,10 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
@@ -43,7 +46,7 @@ class TrafficCheckWorker(
                     return@withContext Result.retry()
                 }
                 
-                // Fetch directions with traffic
+                // Fetch directions with traffic using Routes API
                 val trafficData = fetchTrafficData(
                     apiKey = apiKey,
                     originLat = currentLocation.latitude,
@@ -116,6 +119,10 @@ class TrafficCheckWorker(
         }
     }
     
+    /**
+     * Fetches traffic data using the NEW Google Routes API (not legacy Directions API)
+     * Endpoint: https://routes.googleapis.com/directions/v2:computeRoutes
+     */
     private suspend fun fetchTrafficData(
         apiKey: String,
         originLat: Double,
@@ -124,50 +131,108 @@ class TrafficCheckWorker(
         destLng: Double
     ): TrafficData? = withContext(Dispatchers.IO) {
         try {
-            val url = buildString {
-                append("https://maps.googleapis.com/maps/api/directions/json")
-                append("?origin=$originLat,$originLng")
-                append("&destination=$destLat,$destLng")
-                append("&departure_time=now")
-                append("&traffic_model=best_guess")
-                append("&key=$apiKey")
+            val url = URL("https://routes.googleapis.com/directions/v2:computeRoutes")
+            
+            // Build request body
+            val requestBody = JSONObject().apply {
+                put("origin", JSONObject().apply {
+                    put("location", JSONObject().apply {
+                        put("latLng", JSONObject().apply {
+                            put("latitude", originLat)
+                            put("longitude", originLng)
+                        })
+                    })
+                })
+                put("destination", JSONObject().apply {
+                    put("location", JSONObject().apply {
+                        put("latLng", JSONObject().apply {
+                            put("latitude", destLat)
+                            put("longitude", destLng)
+                        })
+                    })
+                })
+                put("travelMode", "DRIVE")
+                put("routingPreference", "TRAFFIC_AWARE")
+                put("computeAlternativeRoutes", false)
+                put("routeModifiers", JSONObject().apply {
+                    put("avoidTolls", false)
+                    put("avoidHighways", false)
+                    put("avoidFerries", false)
+                })
+                put("languageCode", "en-US")
+                put("units", "METRIC")
             }
             
-            Log.d(TAG, "Fetching: $url")
+            Log.d(TAG, "Routes API request: $requestBody")
             
-            val response = URL(url).readText()
-            val json = JSONObject(response)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Goog-Api-Key", apiKey)
+            // Request both duration and staticDuration fields
+            connection.setRequestProperty("X-Goog-FieldMask", "routes.duration,routes.staticDuration,routes.distanceMeters")
+            connection.doOutput = true
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
             
-            if (json.getString("status") != "OK") {
-                Log.w(TAG, "API error: ${json.getString("status")}")
+            // Write request body
+            OutputStreamWriter(connection.outputStream).use { writer ->
+                writer.write(requestBody.toString())
+                writer.flush()
+            }
+            
+            val responseCode = connection.responseCode
+            if (responseCode != 200) {
+                val errorStream = connection.errorStream?.bufferedReader()?.readText()
+                Log.e(TAG, "Routes API error $responseCode: $errorStream")
                 return@withContext null
             }
             
-            val routes = json.getJSONArray("routes")
-            if (routes.length() == 0) {
+            val response = connection.inputStream.bufferedReader().readText()
+            Log.d(TAG, "Routes API response: $response")
+            
+            val json = JSONObject(response)
+            val routes = json.optJSONArray("routes")
+            
+            if (routes == null || routes.length() == 0) {
                 Log.w(TAG, "No routes found")
                 return@withContext null
             }
             
             val route = routes.getJSONObject(0)
-            val legs = route.getJSONArray("legs")
-            val leg = legs.getJSONObject(0)
             
-            val duration = leg.getJSONObject("duration").getInt("value")
-            val durationInTraffic = if (leg.has("duration_in_traffic")) {
-                leg.getJSONObject("duration_in_traffic").getInt("value")
-            } else {
-                duration // Fall back to normal duration if no traffic data
-            }
+            // Parse duration (with traffic) - format: "123s"
+            val durationStr = route.optString("duration", "0s")
+            val durationInTraffic = parseDuration(durationStr)
+            
+            // Parse staticDuration (without traffic) - format: "100s"
+            val staticDurationStr = route.optString("staticDuration", durationStr)
+            val duration = parseDuration(staticDurationStr)
+            
+            // Parse distance
+            val distance = route.optInt("distanceMeters", 0)
+            
+            Log.d(TAG, "Parsed: duration=$duration, durationInTraffic=$durationInTraffic, distance=$distance")
             
             TrafficData(
-                duration = duration,
+                duration = if (duration > 0) duration else durationInTraffic,
                 durationInTraffic = durationInTraffic,
-                distance = leg.getJSONObject("distance").getInt("value")
+                distance = distance
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch traffic data", e)
             null
+        }
+    }
+    
+    /**
+     * Parse duration string like "1234s" to seconds
+     */
+    private fun parseDuration(durationStr: String): Int {
+        return try {
+            durationStr.removeSuffix("s").toInt()
+        } catch (e: Exception) {
+            0
         }
     }
     
@@ -189,7 +254,7 @@ class TrafficCheckWorker(
 }
 
 data class TrafficData(
-    val duration: Int,           // Normal duration in seconds
+    val duration: Int,           // Normal duration in seconds (staticDuration)
     val durationInTraffic: Int,  // Duration with traffic in seconds
     val distance: Int            // Distance in meters
 )

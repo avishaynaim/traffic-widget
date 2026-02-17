@@ -21,8 +21,8 @@ An Android widget that shows real-time traffic conditions for your commute home 
 1. Go to [Google Cloud Console](https://console.cloud.google.com)
 2. Create a new project (or select existing)
 3. Enable these APIs:
-   - **Directions API** (for traffic data)
-   - **Places API** (for address search)
+   - **Routes API** (for traffic data) - NOT the legacy Directions API!
+   - **Geocoding API** (for address lookup)
 4. Go to "Credentials" → "Create Credentials" → "API Key"
 5. (Optional) Restrict the key to Android apps for security
 
