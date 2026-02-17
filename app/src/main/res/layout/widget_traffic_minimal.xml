@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MINIMAL TEST WIDGET - Guaranteed to work if infrastructure is OK -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetText"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:text="WIDGET WORKS!"
+    android:textSize="20sp"
+    android:textColor="#FFFFFF"
+    android:background="#FF0000"
+    android:gravity="center"
+    android:padding="16dp" />

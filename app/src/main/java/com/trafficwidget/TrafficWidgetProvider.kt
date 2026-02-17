@@ -117,6 +117,13 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int
         ) {
             try {
+                // MINIMAL TEST VERSION - Just show red background with text
+                val views = RemoteViews(context.packageName, R.layout.widget_traffic_minimal)
+                views.setTextViewText(R.id.widgetText, "WIDGET v1.0.10 WORKS!")
+                appWidgetManager.updateAppWidget(appWidgetId, views)
+                return
+
+                /* ORIGINAL CODE - DISABLED FOR TESTING
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val trafficStatus = prefs.getInt(KEY_LAST_TRAFFIC_STATUS, TrafficStatus.UNKNOWN.ordinal)
                 val duration = prefs.getInt(KEY_LAST_DURATION, 0)
