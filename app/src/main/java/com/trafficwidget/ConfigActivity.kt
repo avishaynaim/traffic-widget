@@ -70,8 +70,8 @@ class ConfigActivity : AppCompatActivity() {
     private fun loadSettings() {
         val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
         
-        binding.apiKeyInput.setText(prefs.getString(TrafficWidgetProvider.KEY_API_KEY, ""))
-        binding.homeAddressInput.setText(prefs.getString(TrafficWidgetProvider.KEY_HOME_ADDRESS, ""))
+        binding.apiKeyInput.setText(prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY))
+        binding.homeAddressInput.setText(prefs.getString(TrafficWidgetProvider.KEY_HOME_ADDRESS, TrafficWidgetProvider.DEFAULT_HOME_ADDRESS))
         
         val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, null)
         val homeLng = prefs.getString(TrafficWidgetProvider.KEY_HOME_LNG, null)
@@ -106,7 +106,7 @@ class ConfigActivity : AppCompatActivity() {
         binding.saveAddressButton.setOnClickListener {
             val address = binding.homeAddressInput.text.toString().trim()
             val apiKey = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-                .getString(TrafficWidgetProvider.KEY_API_KEY, "")
+                .getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
             
             if (address.isEmpty()) {
                 Toast.makeText(this, "Please enter an address", Toast.LENGTH_SHORT).show()
@@ -136,7 +136,7 @@ class ConfigActivity : AppCompatActivity() {
         
         binding.testButton.setOnClickListener {
             val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
             val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
 
             when {
@@ -281,7 +281,7 @@ class ConfigActivity : AppCompatActivity() {
     private fun checkAndAutoFinishConfiguration() {
         // Check if already configured
         val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-        val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+        val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
         val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
 
         if (!apiKey.isNullOrEmpty() && !homeLat.isNullOrEmpty()) {
@@ -307,7 +307,7 @@ class ConfigActivity : AppCompatActivity() {
         try {
             // Check if we have minimum configuration
             val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
             val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
 
             if (apiKey.isNullOrEmpty() || homeLat.isNullOrEmpty()) {
@@ -345,7 +345,7 @@ class ConfigActivity : AppCompatActivity() {
         // If widget configuration and configured, finish properly
         if (isWidgetConfiguration) {
             val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, "")
+            val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
             val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, "")
 
             if (!apiKey.isNullOrEmpty() && !homeLat.isNullOrEmpty()) {

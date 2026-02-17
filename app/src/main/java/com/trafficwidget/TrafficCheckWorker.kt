@@ -30,10 +30,30 @@ class TrafficCheckWorker(
                     Context.MODE_PRIVATE
                 )
                 
-                val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, null)
-                val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, null)
-                val homeLng = prefs.getString(TrafficWidgetProvider.KEY_HOME_LNG, null)
-                
+                val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
+                var homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, null)
+                var homeLng = prefs.getString(TrafficWidgetProvider.KEY_HOME_LNG, null)
+
+                // Auto-geocode home address if coordinates missing but address exists
+                if ((homeLat.isNullOrEmpty() || homeLng.isNullOrEmpty()) && apiKey != null) {
+                    val homeAddress = prefs.getString(TrafficWidgetProvider.KEY_HOME_ADDRESS, TrafficWidgetProvider.DEFAULT_HOME_ADDRESS)
+                    if (!homeAddress.isNullOrEmpty()) {
+                        Log.i(TAG, "Auto-geocoding home address: $homeAddress")
+                        val coords = geocodeAddress(homeAddress, apiKey)
+                        if (coords != null) {
+                            homeLat = coords.first.toString()
+                            homeLng = coords.second.toString()
+                            prefs.edit()
+                                .putString(TrafficWidgetProvider.KEY_HOME_LAT, homeLat)
+                                .putString(TrafficWidgetProvider.KEY_HOME_LNG, homeLng)
+                                .apply()
+                            Log.i(TAG, "Home address geocoded: $homeLat, $homeLng")
+                        } else {
+                            Log.w(TAG, "Failed to geocode home address")
+                        }
+                    }
+                }
+
                 if (apiKey.isNullOrEmpty() || homeLat.isNullOrEmpty() || homeLng.isNullOrEmpty()) {
                     Log.w(TAG, "Missing configuration")
                     return@withContext Result.success()
@@ -146,6 +166,46 @@ class TrafficCheckWorker(
         }
     }
     
+    /**
+     * Geocode an address to lat/lng coordinates using Google Geocoding API
+     */
+    private suspend fun geocodeAddress(address: String, apiKey: String): Pair<Double, Double>? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val encodedAddress = java.net.URLEncoder.encode(address, "UTF-8")
+                val url = java.net.URL("https://maps.googleapis.com/maps/api/geocode/json?address=$encodedAddress&key=$apiKey")
+                val connection = url.openConnection()
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                val response = connection.getInputStream().bufferedReader().readText()
+                val json = org.json.JSONObject(response)
+
+                val status = json.getString("status")
+                if (status != "OK") {
+                    Log.w(TAG, "Geocoding failed with status: $status")
+                    return@withContext null
+                }
+
+                val results = json.getJSONArray("results")
+                if (results.length() == 0) {
+                    return@withContext null
+                }
+
+                val location = results.getJSONObject(0)
+                    .getJSONObject("geometry")
+                    .getJSONObject("location")
+
+                val lat = location.getDouble("lat")
+                val lng = location.getDouble("lng")
+
+                Pair(lat, lng)
+            } catch (e: Exception) {
+                Log.e(TAG, "Geocoding error", e)
+                null
+            }
+        }
+    }
+
     /**
      * Fetches traffic data using the NEW Google Routes API (not legacy Directions API)
      * Endpoint: https://routes.googleapis.com/directions/v2:computeRoutes

@@ -28,6 +28,10 @@ class TrafficWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
+
+        // Initialize with defaults on first run
+        initializeDefaults(context)
+
         scheduleTrafficCheck(context)
     }
 
@@ -97,6 +101,9 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val KEY_WORK_LNG = "work_lng"
         const val KEY_WORK_ADDRESS = "work_address"
         const val KEY_API_KEY = "google_api_key"
+        const val DEFAULT_API_KEY = "AIzaSyALvbBxcZQpHExPUiL4uUvfU4JfbxqjANI"  // Hard-coded Google API key
+        const val DEFAULT_HOME_ADDRESS = "Bar Kochva, Rehovot"  // Default home address
+        const val DEFAULT_WORK_ADDRESS = "Dizengof, Beer Yaakov"  // Default work address
         const val KEY_LAST_TRAFFIC_STATUS = "last_traffic_status"
         const val KEY_LAST_DURATION = "last_duration"
         const val KEY_LAST_DURATION_TRAFFIC = "last_duration_traffic"
@@ -117,13 +124,14 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int
         ) {
             try {
-                // MINIMAL TEST VERSION - Just show red background with text
+                /* MINIMAL TEST CODE - DISABLED, USING FULL WIDGET NOW
                 val views = RemoteViews(context.packageName, R.layout.widget_traffic_minimal)
-                views.setTextViewText(R.id.widgetText, "WIDGET v1.0.10 WORKS!")
+                views.setTextViewText(R.id.widgetText, "WIDGET v1.0.11 WORKS!")
                 appWidgetManager.updateAppWidget(appWidgetId, views)
                 return
+                */
 
-                /* ORIGINAL CODE - DISABLED FOR TESTING
+                // FULL WIDGET CODE
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val trafficStatus = prefs.getInt(KEY_LAST_TRAFFIC_STATUS, TrafficStatus.UNKNOWN.ordinal)
                 val duration = prefs.getInt(KEY_LAST_DURATION, 0)
@@ -227,8 +235,35 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 updateWidget(context, appWidgetManager, widgetId)
             }
         }
+
+        /**
+         * Initialize widget with default values on first run
+         * This allows the widget to work immediately without user configuration
+         */
+        private fun initializeDefaults(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+            // Check if already initialized (has home coordinates)
+            val homeLat = prefs.getString(KEY_HOME_LAT, null)
+            if (homeLat != null) {
+                // Already initialized, skip
+                return
+            }
+
+            // Save default values
+            prefs.edit()
+                .putString(KEY_API_KEY, DEFAULT_API_KEY)
+                .putString(KEY_HOME_ADDRESS, DEFAULT_HOME_ADDRESS)
+                .putString(KEY_WORK_ADDRESS, DEFAULT_WORK_ADDRESS)
+                .apply()
+
+            // Trigger geocoding of default addresses
+            // This will be handled by TrafficCheckWorker on first update
+            android.util.Log.i("TrafficWidget", "Initialized with default values")
+        }
     }
 }
+
 
 enum class TrafficStatus {
     UNKNOWN, GREEN, YELLOW, RED
