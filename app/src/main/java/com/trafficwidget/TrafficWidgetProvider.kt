@@ -270,12 +270,12 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                         // Showing alt route in info panel
                         val altMin = altDurationTraffic / 60
                         val altDelay = (altDurationTraffic - altDuration) / 60
-                        views.setTextViewText(R.id.statusLabel, "Alt Route")
+                        views.setTextViewText(R.id.statusLabel, "Fastest (toll)")
                         views.setTextViewText(R.id.travelTime, "${altMin} min")
                         views.setTextViewText(R.id.delayInfo,
                             if (altDelay > 0) "+${altDelay} min delay" else "No delay")
                         val mainMin = durationTraffic / 60
-                        views.setTextViewText(R.id.altRouteInfo, "← Main: ${mainMin} min (tap)")
+                        views.setTextViewText(R.id.altRouteInfo, "← No Toll: ${mainMin} min (tap)")
                     } else {
                         // Showing primary route in info panel
                         val minutes = durationTraffic / 60
@@ -287,9 +287,9 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                             val altMin = altDurationTraffic / 60
                             val altDelay = (altDurationTraffic - altDuration) / 60
                             val altDelayStr = if (altDelay > 0) " +${altDelay}m" else ""
-                            views.setTextViewText(R.id.altRouteInfo, "Alt: ${altMin} min${altDelayStr} (tap)")
+                            views.setTextViewText(R.id.altRouteInfo, "🛣️ Fastest: ${altMin} min${altDelayStr} (tap)")
                         } else {
-                            views.setTextViewText(R.id.altRouteInfo, "No alt route")
+                            views.setTextViewText(R.id.altRouteInfo, "No faster route")
                         }
                     }
                 } else {

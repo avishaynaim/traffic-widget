@@ -113,13 +113,29 @@ class TrafficCheckWorker(
                     return@withContext Result.success()
                 }
 
-                val result = fetchTrafficData(apiKey, finalOriginLat.toDouble(), finalOriginLng.toDouble(),
-                    destLat.toDouble(), destLng.toDouble())
+                val oLat = finalOriginLat.toDouble()
+                val oLng = finalOriginLng.toDouble()
+                val dLat = destLat.toDouble()
+                val dLng = destLng.toDouble()
 
-                if (result != null) {
-                    val primary = result.primary
-                    val alt = result.alt
+                // No-toll route (primary) + fastest route (alt, may include tolls)
+                val noTollResult = fetchTrafficData(apiKey, oLat, oLng, dLat, dLng, avoidTolls = true)
+                val fastestResult = fetchTrafficData(apiKey, oLat, oLng, dLat, dLng, avoidTolls = false)
 
+                // Use no-toll as primary; fastest as alt (only if meaningfully different)
+                val primary = (noTollResult ?: fastestResult)?.primary ?: run {
+                    TrafficWidgetProvider.updateAllWidgets(context)
+                    scheduleNextRefresh()
+                    return@withContext Result.success()
+                }
+                val fastestPrimary = fastestResult?.primary
+                // Show fastest as alt only if it's at least 1 min faster than no-toll route
+                val altRoute = if (fastestPrimary != null &&
+                    fastestPrimary.durationInTraffic < primary.durationInTraffic - 60) {
+                    fastestPrimary
+                } else null
+
+                if (true) {
                     val ratio = primary.durationInTraffic.toFloat() / primary.duration.toFloat()
                     val status = when {
                         ratio < TrafficWidgetProvider.THRESHOLD_GREEN -> TrafficStatus.GREEN
@@ -134,9 +150,9 @@ class TrafficCheckWorker(
                         .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
                         .remove(TrafficWidgetProvider.KEY_LAST_ERROR)
 
-                    if (alt != null) {
-                        editor.putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION, alt.duration)
-                              .putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION_TRAFFIC, alt.durationInTraffic)
+                    if (altRoute != null) {
+                        editor.putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION, altRoute.duration)
+                              .putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION_TRAFFIC, altRoute.durationInTraffic)
                     } else {
                         editor.putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION, 0)
                               .putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION_TRAFFIC, 0)
@@ -146,10 +162,10 @@ class TrafficCheckWorker(
                     // Download and save static map image
                     downloadRouteMap(
                         apiKey = apiKey,
-                        originLat = finalOriginLat.toDouble(), originLng = finalOriginLng.toDouble(),
-                        destLat = destLat.toDouble(), destLng = destLng.toDouble(),
+                        originLat = oLat, originLng = oLng,
+                        destLat = dLat, destLng = dLng,
                         primaryPolyline = primary.polyline,
-                        altPolyline = alt?.polyline
+                        altPolyline = altRoute?.polyline
                     )
                 }
 
@@ -257,7 +273,8 @@ class TrafficCheckWorker(
     private suspend fun fetchTrafficData(
         apiKey: String,
         originLat: Double, originLng: Double,
-        destLat: Double, destLng: Double
+        destLat: Double, destLng: Double,
+        avoidTolls: Boolean = false
     ): RouteResult? = withContext(Dispatchers.IO) {
         try {
             val url = URL("https://routes.googleapis.com/directions/v2:computeRoutes")
@@ -278,9 +295,14 @@ class TrafficCheckWorker(
                 })
                 put("travelMode", "DRIVE")
                 put("routingPreference", "TRAFFIC_AWARE")
-                put("computeAlternativeRoutes", true)
+                put("computeAlternativeRoutes", false)
                 put("languageCode", "en-US")
                 put("units", "METRIC")
+                if (avoidTolls) {
+                    put("routeModifiers", JSONObject().apply {
+                        put("avoidTolls", true)
+                    })
+                }
             }
 
             val conn = url.openConnection() as HttpURLConnection
