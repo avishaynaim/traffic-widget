@@ -59,7 +59,6 @@ class ConfigActivity : AppCompatActivity() {
 
         loadSettings()
         setupClickListeners()
-        checkPermissions()
 
         // If widget configuration and already configured, auto-finish
         if (isWidgetConfiguration) {

@@ -238,8 +238,8 @@ class TrafficWidgetProvider : AppWidgetProvider() {
 
         /**
          * Draws a semicircular speedometer gauge bitmap.
-         * Arc: LEFT=RED (heavy traffic) → TOP=YELLOW → RIGHT=GREEN (clear roads).
-         * Needle points based on traffic ratio (1.0=green/right, 2.0+=red/left).
+         * Arc: LEFT=GREEN (clear roads) → TOP=YELLOW → RIGHT=RED (heavy traffic).
+         * Needle points based on traffic ratio (1.0=green/left, 2.0+=red/right).
          */
         fun createGaugeBitmap(ratio: Float): Bitmap {
             val W = 200
@@ -263,7 +263,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             }
             canvas.drawArc(oval, 180f, 180f, false, trackPaint)
 
-            // Gradient arc: RED (left/180°) → YELLOW (top/270°) → GREEN (right/360°)
+            // Gradient arc: GREEN (left/180°) → YELLOW (top/270°) → RED (right/360°)
             // Draw in segments for smooth color transition
             val segments = 60
             val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -273,16 +273,16 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             }
             val segSweep = 180f / segments + 0.5f  // slight overlap prevents gaps
             for (i in 0 until segments) {
-                val t = i.toFloat() / (segments - 1)  // 0.0=left/RED, 1.0=right/GREEN
+                val t = i.toFloat() / (segments - 1)  // 0.0=left/GREEN, 1.0=right/RED
                 arcPaint.color = when {
                     t < 0.5f -> interpolateColor(
-                        Color.parseColor("#F44336"),   // Red
-                        Color.parseColor("#FFC107"),   // Yellow
+                        Color.parseColor("#4CAF50"),   // Green (left)
+                        Color.parseColor("#FFC107"),   // Yellow (middle)
                         t * 2f
                     )
                     else -> interpolateColor(
                         Color.parseColor("#FFC107"),   // Yellow
-                        Color.parseColor("#4CAF50"),   // Green
+                        Color.parseColor("#F44336"),   // Red (right)
                         (t - 0.5f) * 2f
                     )
                 }
@@ -290,10 +290,10 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 canvas.drawArc(oval, startAngle, segSweep, false, arcPaint)
             }
 
-            // Needle: fraction=0 → right (GREEN, 0°), fraction=1 → left (RED, 180°)
+            // Needle: fraction=0 (good) → left (GREEN, 180°), fraction=1 (bad) → right (RED, 0°)
             val maxRatio = 2.0f
             val fraction = ((ratio - 1f) / (maxRatio - 1f)).coerceIn(0f, 1f)
-            val needleAngleRad = Math.toRadians((fraction * 180.0))
+            val needleAngleRad = Math.toRadians(((1.0 - fraction) * 180.0))
             val needleLen = radius - 12f
             val nx = (cx + needleLen * cos(needleAngleRad)).toFloat()
             val ny = (cy - needleLen * sin(needleAngleRad)).toFloat()
