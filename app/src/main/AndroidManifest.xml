@@ -40,6 +40,7 @@
             <intent-filter>
                 <action android:name="com.trafficwidget.ACTION_REFRESH" />
                 <action android:name="com.trafficwidget.ACTION_OPEN_WAZE" />
+                <action android:name="com.trafficwidget.ACTION_TOGGLE_DIRECTION" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

@@ -10,7 +10,6 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -30,12 +29,16 @@ class TrafficCheckWorker(
                     TrafficWidgetProvider.PREFS_NAME,
                     Context.MODE_PRIVATE
                 )
-                
+
                 val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
+                val direction = prefs.getInt(TrafficWidgetProvider.KEY_DIRECTION, TrafficWidgetProvider.DIRECTION_TO_HOME)
+
                 var homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, null)
                 var homeLng = prefs.getString(TrafficWidgetProvider.KEY_HOME_LNG, null)
+                var workLat = prefs.getString(TrafficWidgetProvider.KEY_WORK_LAT, null)
+                var workLng = prefs.getString(TrafficWidgetProvider.KEY_WORK_LNG, null)
 
-                // Auto-geocode home address if coordinates missing but address exists
+                // Auto-geocode home address if coordinates missing
                 if ((homeLat.isNullOrEmpty() || homeLng.isNullOrEmpty()) && apiKey != null) {
                     val homeAddress = prefs.getString(TrafficWidgetProvider.KEY_HOME_ADDRESS, TrafficWidgetProvider.DEFAULT_HOME_ADDRESS)
                     if (!homeAddress.isNullOrEmpty()) {
@@ -48,18 +51,56 @@ class TrafficCheckWorker(
                                 .putString(TrafficWidgetProvider.KEY_HOME_LAT, homeLat)
                                 .putString(TrafficWidgetProvider.KEY_HOME_LNG, homeLng)
                                 .apply()
-                            Log.i(TAG, "Home address geocoded: $homeLat, $homeLng")
-                        } else {
-                            Log.w(TAG, "Failed to geocode home address")
+                            Log.i(TAG, "Home geocoded: $homeLat, $homeLng")
                         }
                     }
                 }
 
-                if (apiKey.isNullOrEmpty() || homeLat.isNullOrEmpty() || homeLng.isNullOrEmpty()) {
-                    Log.w(TAG, "Missing configuration")
+                // Auto-geocode work address if direction=TO_WORK and coordinates missing
+                if (direction == TrafficWidgetProvider.DIRECTION_TO_WORK &&
+                    (workLat.isNullOrEmpty() || workLng.isNullOrEmpty()) && apiKey != null) {
+                    val workAddress = prefs.getString(TrafficWidgetProvider.KEY_WORK_ADDRESS, TrafficWidgetProvider.DEFAULT_WORK_ADDRESS)
+                    if (!workAddress.isNullOrEmpty()) {
+                        Log.i(TAG, "Auto-geocoding work address: $workAddress")
+                        val coords = geocodeAddress(workAddress, apiKey)
+                        if (coords != null) {
+                            workLat = coords.first.toString()
+                            workLng = coords.second.toString()
+                            prefs.edit()
+                                .putString(TrafficWidgetProvider.KEY_WORK_LAT, workLat)
+                                .putString(TrafficWidgetProvider.KEY_WORK_LNG, workLng)
+                                .apply()
+                            Log.i(TAG, "Work geocoded: $workLat, $workLng")
+                        }
+                    }
+                }
+
+                // Determine destination based on direction
+                val destLat: String?
+                val destLng: String?
+                if (direction == TrafficWidgetProvider.DIRECTION_TO_WORK) {
+                    destLat = workLat
+                    destLng = workLng
+                } else {
+                    destLat = homeLat
+                    destLng = homeLng
+                }
+
+                if (apiKey.isNullOrEmpty() || destLat.isNullOrEmpty() || destLng.isNullOrEmpty()) {
+                    val msg = when {
+                        apiKey.isNullOrEmpty() -> "API key not configured"
+                        direction == TrafficWidgetProvider.DIRECTION_TO_WORK -> "Work address not configured"
+                        else -> "Home address not configured"
+                    }
+                    Log.w(TAG, "Missing configuration: $msg")
+                    prefs.edit()
+                        .putString(TrafficWidgetProvider.KEY_LAST_ERROR, msg)
+                        .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
+                        .apply()
+                    TrafficWidgetProvider.updateAllWidgets(context)
                     return@withContext Result.success()
                 }
-                
+
                 // Get current location
                 val currentLocation = getCurrentLocation()
                 if (currentLocation == null) {
@@ -71,18 +112,17 @@ class TrafficCheckWorker(
                     TrafficWidgetProvider.updateAllWidgets(context)
                     return@withContext Result.retry()
                 }
-                
-                // Fetch directions with traffic using Routes API
+
+                // Fetch traffic data
                 val trafficData = fetchTrafficData(
                     apiKey = apiKey,
                     originLat = currentLocation.latitude,
                     originLng = currentLocation.longitude,
-                    destLat = homeLat.toDouble(),
-                    destLng = homeLng.toDouble()
+                    destLat = destLat.toDouble(),
+                    destLng = destLng.toDouble()
                 )
-                
+
                 if (trafficData != null) {
-                    // Calculate traffic status
                     val ratio = trafficData.durationInTraffic.toFloat() / trafficData.duration.toFloat()
                     val status = when {
                         ratio < TrafficWidgetProvider.THRESHOLD_GREEN -> TrafficStatus.GREEN
@@ -93,27 +133,23 @@ class TrafficCheckWorker(
                     Log.i(TAG, "Traffic ratio: $ratio, status: $status")
                     Log.i(TAG, "Normal: ${trafficData.duration/60}min, With traffic: ${trafficData.durationInTraffic/60}min")
 
-                    // Save to prefs and clear any previous errors
                     prefs.edit()
                         .putInt(TrafficWidgetProvider.KEY_LAST_TRAFFIC_STATUS, status.ordinal)
                         .putInt(TrafficWidgetProvider.KEY_LAST_DURATION, trafficData.duration)
                         .putInt(TrafficWidgetProvider.KEY_LAST_DURATION_TRAFFIC, trafficData.durationInTraffic)
                         .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
-                        .remove(TrafficWidgetProvider.KEY_LAST_ERROR)  // Clear error on success
+                        .remove(TrafficWidgetProvider.KEY_LAST_ERROR)
                         .apply()
 
-                    // Update widget
                     TrafficWidgetProvider.updateAllWidgets(context)
                 } else {
-                    // Traffic data fetch failed - error already saved in fetchTrafficData
                     TrafficWidgetProvider.updateAllWidgets(context)
                 }
-                
+
                 Result.success()
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking traffic", e)
 
-                // Save error for user visibility
                 val prefs = context.getSharedPreferences(
                     TrafficWidgetProvider.PREFS_NAME,
                     Context.MODE_PRIVATE
@@ -134,25 +170,22 @@ class TrafficCheckWorker(
             }
         }
     }
-    
+
     private fun getCurrentLocation(): Location? {
         return try {
             val fusedLocationClient: FusedLocationProviderClient =
                 LocationServices.getFusedLocationProviderClient(context)
-            
-            // Try to get last known location first
+
             val lastLocation = Tasks.await(
                 fusedLocationClient.lastLocation,
                 10, TimeUnit.SECONDS
             )
-            
-            if (lastLocation != null && 
+
+            if (lastLocation != null &&
                 System.currentTimeMillis() - lastLocation.time < 10 * 60 * 1000) {
-                // Location is recent enough (< 10 minutes)
                 return lastLocation
             }
-            
-            // Request fresh location
+
             val locationTask = fusedLocationClient.getCurrentLocation(
                 Priority.PRIORITY_BALANCED_POWER_ACCURACY,
                 null
@@ -166,9 +199,9 @@ class TrafficCheckWorker(
             null
         }
     }
-    
+
     /**
-     * Geocode an address to lat/lng coordinates using Google Geocoding API
+     * Geocode an address to lat/lng using Google Geocoding API
      */
     private suspend fun geocodeAddress(address: String, apiKey: String): Pair<Double, Double>? {
         return withContext(Dispatchers.IO) {
@@ -188,18 +221,13 @@ class TrafficCheckWorker(
                 }
 
                 val results = json.getJSONArray("results")
-                if (results.length() == 0) {
-                    return@withContext null
-                }
+                if (results.length() == 0) return@withContext null
 
                 val location = results.getJSONObject(0)
                     .getJSONObject("geometry")
                     .getJSONObject("location")
 
-                val lat = location.getDouble("lat")
-                val lng = location.getDouble("lng")
-
-                Pair(lat, lng)
+                Pair(location.getDouble("lat"), location.getDouble("lng"))
             } catch (e: Exception) {
                 Log.e(TAG, "Geocoding error", e)
                 null
@@ -208,7 +236,7 @@ class TrafficCheckWorker(
     }
 
     /**
-     * Fetches traffic data using the NEW Google Routes API (not legacy Directions API)
+     * Fetches traffic data using the Google Routes API v2
      * Endpoint: https://routes.googleapis.com/directions/v2:computeRoutes
      */
     private suspend fun fetchTrafficData(
@@ -220,8 +248,7 @@ class TrafficCheckWorker(
     ): TrafficData? = withContext(Dispatchers.IO) {
         try {
             val url = URL("https://routes.googleapis.com/directions/v2:computeRoutes")
-            
-            // Build request body
+
             val requestBody = JSONObject().apply {
                 put("origin", JSONObject().apply {
                     put("location", JSONObject().apply {
@@ -250,31 +277,26 @@ class TrafficCheckWorker(
                 put("languageCode", "en-US")
                 put("units", "METRIC")
             }
-            
-            Log.d(TAG, "Routes API request: $requestBody")
-            
+
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("X-Goog-Api-Key", apiKey)
-            // Request both duration and staticDuration fields
             connection.setRequestProperty("X-Goog-FieldMask", "routes.duration,routes.staticDuration,routes.distanceMeters")
             connection.doOutput = true
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
-            
-            // Write request body
+
             OutputStreamWriter(connection.outputStream).use { writer ->
                 writer.write(requestBody.toString())
                 writer.flush()
             }
-            
+
             val responseCode = connection.responseCode
             if (responseCode != 200) {
                 val errorStream = connection.errorStream?.bufferedReader()?.readText()
                 Log.e(TAG, "Routes API error $responseCode: $errorStream")
 
-                // Parse error message and save to prefs for user visibility
                 try {
                     val errorJson = JSONObject(errorStream ?: "{}")
                     val errorMessage = errorJson.optJSONObject("error")?.optString("message", "Unknown error")
@@ -292,10 +314,10 @@ class TrafficCheckWorker(
 
                 return@withContext null
             }
-            
+
             val response = connection.inputStream.bufferedReader().readText()
             Log.d(TAG, "Routes API response: $response")
-            
+
             val json = JSONObject(response)
             val routes = json.optJSONArray("routes")
 
@@ -311,22 +333,20 @@ class TrafficCheckWorker(
                     .apply()
                 return@withContext null
             }
-            
+
             val route = routes.getJSONObject(0)
-            
-            // Parse duration (with traffic) - format: "123s"
+
+            // duration = with traffic, staticDuration = without traffic
             val durationStr = route.optString("duration", "0s")
             val durationInTraffic = parseDuration(durationStr)
-            
-            // Parse staticDuration (without traffic) - format: "100s"
+
             val staticDurationStr = route.optString("staticDuration", durationStr)
             val duration = parseDuration(staticDurationStr)
-            
-            // Parse distance
+
             val distance = route.optInt("distanceMeters", 0)
-            
+
             Log.d(TAG, "Parsed: duration=$duration, durationInTraffic=$durationInTraffic, distance=$distance")
-            
+
             TrafficData(
                 duration = if (duration > 0) duration else durationInTraffic,
                 durationInTraffic = durationInTraffic,
@@ -337,10 +357,7 @@ class TrafficCheckWorker(
             null
         }
     }
-    
-    /**
-     * Parse duration string like "1234s" to seconds
-     */
+
     private fun parseDuration(durationStr: String): Int {
         return try {
             durationStr.removeSuffix("s").toInt()
@@ -348,10 +365,10 @@ class TrafficCheckWorker(
             0
         }
     }
-    
+
     companion object {
         private const val TAG = "TrafficCheckWorker"
-        
+
         fun enqueueNow(context: Context) {
             val workRequest = OneTimeWorkRequestBuilder<TrafficCheckWorker>()
                 .setConstraints(
@@ -360,7 +377,7 @@ class TrafficCheckWorker(
                         .build()
                 )
                 .build()
-            
+
             WorkManager.getInstance(context).enqueue(workRequest)
         }
     }

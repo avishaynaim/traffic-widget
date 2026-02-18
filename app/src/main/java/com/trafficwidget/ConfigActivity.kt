@@ -69,10 +69,10 @@ class ConfigActivity : AppCompatActivity() {
     
     private fun loadSettings() {
         val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
-        
+
         binding.apiKeyInput.setText(prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY))
         binding.homeAddressInput.setText(prefs.getString(TrafficWidgetProvider.KEY_HOME_ADDRESS, TrafficWidgetProvider.DEFAULT_HOME_ADDRESS))
-        
+
         val homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, null)
         val homeLng = prefs.getString(TrafficWidgetProvider.KEY_HOME_LNG, null)
         if (homeLat != null && homeLng != null) {
@@ -80,7 +80,17 @@ class ConfigActivity : AppCompatActivity() {
         } else {
             binding.coordinatesText.text = "📍 Not set"
         }
-        
+
+        binding.workAddressInput.setText(prefs.getString(TrafficWidgetProvider.KEY_WORK_ADDRESS, TrafficWidgetProvider.DEFAULT_WORK_ADDRESS))
+
+        val workLat = prefs.getString(TrafficWidgetProvider.KEY_WORK_LAT, null)
+        val workLng = prefs.getString(TrafficWidgetProvider.KEY_WORK_LNG, null)
+        if (workLat != null && workLng != null) {
+            binding.workCoordinatesText.text = "📍 $workLat, $workLng"
+        } else {
+            binding.workCoordinatesText.text = "📍 Not set"
+        }
+
         // Load threshold values
         val greenThreshold = ((TrafficWidgetProvider.THRESHOLD_GREEN - 1) * 100).toInt()
         val yellowThreshold = ((TrafficWidgetProvider.THRESHOLD_YELLOW - 1) * 100).toInt()
@@ -134,6 +144,35 @@ class ConfigActivity : AppCompatActivity() {
             }
         }
         
+        binding.saveWorkAddressButton.setOnClickListener {
+            val address = binding.workAddressInput.text.toString().trim()
+            val apiKey = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+                .getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
+
+            if (address.isEmpty()) {
+                Toast.makeText(this, "Please enter a work address", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (apiKey.isNullOrEmpty()) {
+                Toast.makeText(this, "Please set API key first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            binding.saveWorkAddressButton.isEnabled = false
+            binding.saveWorkAddressButton.text = "Looking up..."
+
+            lifecycleScope.launch {
+                val result = geocodeAddress(address, apiKey)
+                if (result != null) {
+                    saveWorkLocation(result.first, result.second, address)
+                    Toast.makeText(this@ConfigActivity, "Work location saved!", Toast.LENGTH_SHORT).show()
+                }
+                binding.saveWorkAddressButton.isEnabled = true
+                binding.saveWorkAddressButton.text = "Save Work Address"
+            }
+        }
+
         binding.testButton.setOnClickListener {
             val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
             val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
@@ -278,6 +317,17 @@ class ConfigActivity : AppCompatActivity() {
         }
     }
 
+    private fun saveWorkLocation(lat: String, lng: String, address: String) {
+        val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
+        prefs.edit()
+            .putString(TrafficWidgetProvider.KEY_WORK_LAT, lat)
+            .putString(TrafficWidgetProvider.KEY_WORK_LNG, lng)
+            .putString(TrafficWidgetProvider.KEY_WORK_ADDRESS, address)
+            .apply()
+
+        binding.workCoordinatesText.text = "📍 $lat, $lng"
+    }
+
     private fun checkAndAutoFinishConfiguration() {
         // Check if already configured
         val prefs = getSharedPreferences(TrafficWidgetProvider.PREFS_NAME, MODE_PRIVATE)
@@ -386,20 +436,25 @@ class ConfigActivity : AppCompatActivity() {
                    • Create a project
                    • Enable "Routes API" and "Geocoding API"
                    • Create an API key
-                   
+
                 2. Enter your API key above
-                
-                3. Type your home address and save
-                
-                4. Add the widget to your home screen
-                
-                The widget will:
-                • Check traffic every 15 minutes
-                • Show 🟢 green if <15% delay
-                • Show 🟡 yellow if 15-35% delay
-                • Show 🔴 red if >35% delay
-                
-                Tap the gauge to open Waze/Maps navigation!
+
+                3. Enter your home address and save
+
+                4. Enter your work address and save
+
+                5. Add the widget to your home screen
+
+                Widget controls:
+                • 🔄 Refresh traffic now
+                • ⚙️ Open settings
+                • →🏠 / →🏢 Toggle destination (tap to switch)
+                • Tap gauge to open navigation
+
+                Traffic colors:
+                • 🟢 Green: <15% delay
+                • 🟡 Yellow: 15-35% delay
+                • 🔴 Red: >35% delay
             """.trimIndent())
             .setPositiveButton("Got it", null)
             .show()

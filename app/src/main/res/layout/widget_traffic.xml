@@ -1,123 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="8dp"
     android:background="@drawable/widget_background">
 
-    <!-- Header with title and buttons -->
+    <!-- Header row: direction toggle + refresh + settings -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="36dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
         <TextView
+            android:id="@+id/directionButton"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:text="🏠 Traffic Home"
-            android:textSize="14sp"
+            android:text="→🏠 To Home"
+            android:textSize="11sp"
             android:textColor="#FFFFFF"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:background="#33FFFFFF"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:layout_marginEnd="4dp" />
 
-        <Button
+        <TextView
             android:id="@+id/refreshButton"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="#33FFFFFF"
+            android:layout_width="36dp"
+            android:layout_height="match_parent"
             android:text="🔄"
-            android:textSize="18sp"
-            android:contentDescription="Refresh" />
-
-        <Button
-            android:id="@+id/settingsButton"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:textSize="16sp"
+            android:gravity="center"
             android:background="#33FFFFFF"
+            android:layout_marginEnd="4dp" />
+
+        <TextView
+            android:id="@+id/settingsButton"
+            android:layout_width="36dp"
+            android:layout_height="match_parent"
             android:text="⚙️"
-            android:textSize="18sp"
-            android:contentDescription="Settings" />
+            android:textSize="16sp"
+            android:gravity="center"
+            android:background="#33FFFFFF" />
+
     </LinearLayout>
 
-    <!-- Main gauge area - clickable to open navigation -->
+    <!-- Main area: gauge image + info -->
     <LinearLayout
         android:id="@+id/gaugeContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="4dp">
 
-        <!-- Traffic light indicator -->
-        <FrameLayout
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:layout_marginBottom="8dp">
+        <!-- Canvas-drawn semicircle gauge bitmap -->
+        <ImageView
+            android:id="@+id/gaugeImage"
+            android:layout_width="110dp"
+            android:layout_height="68dp"
+            android:scaleType="fitCenter" />
 
-            <!-- Outer ring -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@drawable/gauge_ring" />
+        <!-- Info column -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingStart="4dp">
 
-            <!-- Inner colored circle -->
-            <View
-                android:id="@+id/gaugeIndicator"
-                android:layout_width="60dp"
-                android:layout_height="60dp"
-                android:layout_gravity="center"
-                android:background="@drawable/gauge_circle" />
-
-            <!-- Status emoji -->
             <TextView
-                android:id="@+id/statusEmoji"
+                android:id="@+id/statusLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="⚪"
-                android:textSize="32sp"
-                tools:ignore="HardcodedText" />
-        </FrameLayout>
+                android:text="Unknown"
+                android:textSize="13sp"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
 
-        <!-- Status label -->
-        <TextView
-            android:id="@+id/statusLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Unknown"
-            android:textSize="16sp"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold" />
+            <TextView
+                android:id="@+id/travelTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="-- min"
+                android:textSize="22sp"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
 
-        <!-- Travel time -->
-        <TextView
-            android:id="@+id/travelTime"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="-- min"
-            android:textSize="24sp"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold" />
+            <TextView
+                android:id="@+id/delayInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tap to configure"
+                android:textSize="11sp"
+                android:textColor="#B0FFFFFF"
+                android:maxLines="2"
+                android:ellipsize="end" />
 
-        <!-- Delay info -->
-        <TextView
-            android:id="@+id/delayInfo"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Tap to configure"
-            android:textSize="12sp"
-            android:textColor="#B0FFFFFF"
-            android:gravity="center"
-            android:maxLines="2"
-            android:ellipsize="end"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp" />
+        </LinearLayout>
+
     </LinearLayout>
 
-    <!-- Footer with last update time -->
+    <!-- Footer: last update time -->
     <TextView
         android:id="@+id/lastUpdate"
         android:layout_width="match_parent"
