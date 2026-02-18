@@ -230,7 +230,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                         val altDelayStr = if (altDelay > 0) " +${altDelay}m" else ""
                         views.setTextViewText(R.id.altRouteInfo, "Alt: ${altMin} min${altDelayStr}")
                     } else {
-                        views.setTextViewText(R.id.altRouteInfo, "")
+                        views.setTextViewText(R.id.altRouteInfo, "No alt route")
                     }
                 } else {
                     views.setTextViewText(R.id.travelTime, "-- min")

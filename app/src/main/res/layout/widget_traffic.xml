@@ -4,6 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="6dp"
+    android:layoutDirection="ltr"
     android:background="@drawable/widget_background">
 
     <!-- Header: direction toggle + refresh + settings -->
@@ -62,8 +63,7 @@
     <LinearLayout
         android:id="@+id/gaugeContainer"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
