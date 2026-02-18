@@ -205,7 +205,7 @@ class TrafficCheckWorker(
                 val listener = object : android.location.LocationListener {
                     override fun onLocationChanged(loc: android.location.Location) {
                         try { lm.removeUpdates(this) } catch (e: Exception) {}
-                        if (cont.isActive) cont.resume(Pair(loc.latitude, loc.longitude))
+                        if (cont.isActive) cont.resumeWith(Result.success(Pair(loc.latitude, loc.longitude)))
                     }
                     override fun onProviderDisabled(p: String) {}
                 }
@@ -218,7 +218,7 @@ class TrafficCheckWorker(
                 } catch (e: Exception) {
                     Log.e(TAG, "requestLocationUpdates failed", e)
                     // Fall back to best stale fix
-                    if (cont.isActive) cont.resume(best?.let { Pair(it.latitude, it.longitude) })
+                    if (cont.isActive) cont.resumeWith(Result.success(best?.let { Pair(it.latitude, it.longitude) }))
                 }
             }
         } ?: best?.let { Pair(it.latitude, it.longitude) }  // timeout → use stale if available
