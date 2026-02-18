@@ -169,6 +169,8 @@ class TrafficWidgetProvider : AppWidgetProvider() {
 
         const val KEY_USE_GPS = "use_gps"
         const val KEY_SHOW_ALT = "show_alt"
+        const val KEY_GPS_LAT = "gps_lat"
+        const val KEY_GPS_LNG = "gps_lng"
 
         // Traffic status thresholds (ratio of traffic time to normal time)
         const val THRESHOLD_GREEN = 1.15f   // < 15% slower = green

@@ -80,7 +80,21 @@ class TrafficCheckWorker(
                     if (loc != null) {
                         finalOriginLat = loc.first.toString()
                         finalOriginLng = loc.second.toString()
-                        Log.i(TAG, "GPS origin: $finalOriginLat, $finalOriginLng")
+                        // Save for future background refreshes
+                        prefs.edit()
+                            .putString(TrafficWidgetProvider.KEY_GPS_LAT, finalOriginLat)
+                            .putString(TrafficWidgetProvider.KEY_GPS_LNG, finalOriginLng)
+                            .apply()
+                        Log.i(TAG, "GPS origin (fresh): $finalOriginLat, $finalOriginLng")
+                    } else {
+                        // Background location unavailable — use last saved GPS fix
+                        val savedLat = prefs.getString(TrafficWidgetProvider.KEY_GPS_LAT, null)
+                        val savedLng = prefs.getString(TrafficWidgetProvider.KEY_GPS_LNG, null)
+                        if (!savedLat.isNullOrEmpty() && !savedLng.isNullOrEmpty()) {
+                            finalOriginLat = savedLat
+                            finalOriginLng = savedLng
+                            Log.i(TAG, "GPS origin (cached): $finalOriginLat, $finalOriginLng")
+                        }
                     }
                 }
 
@@ -95,6 +109,7 @@ class TrafficCheckWorker(
                     prefs.edit().putString(TrafficWidgetProvider.KEY_LAST_ERROR, msg)
                         .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis()).apply()
                     TrafficWidgetProvider.updateAllWidgets(context)
+                    scheduleNextRefresh()
                     return@withContext Result.success()
                 }
 
