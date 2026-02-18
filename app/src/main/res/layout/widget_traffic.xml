@@ -136,6 +136,20 @@
 
     </LinearLayout>
 
+    <!-- Arrival time ETA -->
+    <TextView
+        android:id="@+id/etaText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:gravity="center"
+        android:letterSpacing="0.05"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp" />
+
     <!-- Footer: last update -->
     <TextView
         android:id="@+id/lastUpdate"

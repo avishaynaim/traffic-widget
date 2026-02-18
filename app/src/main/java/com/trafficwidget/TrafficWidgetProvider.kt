@@ -294,6 +294,21 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.altRouteInfo, "")
                 }
 
+                // ETA — arrival time in 24h format
+                val displayDuration = if (showAlt && altDurationTraffic > 0) altDurationTraffic else durationTraffic
+                if (displayDuration > 0) {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.add(java.util.Calendar.SECOND, displayDuration)
+                    val etaStr = "%02d:%02d".format(
+                        cal.get(java.util.Calendar.HOUR_OF_DAY),
+                        cal.get(java.util.Calendar.MINUTE)
+                    )
+                    val prefix = if (showAlt && altDurationTraffic > 0) "Alt ETA" else "ETA"
+                    views.setTextViewText(R.id.etaText, "$prefix  $etaStr")
+                } else {
+                    views.setTextViewText(R.id.etaText, "")
+                }
+
                 // Last update time
                 if (lastUpdate > 0) {
                     val ago = (System.currentTimeMillis() - lastUpdate) / 60000
@@ -347,44 +362,60 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             }
             canvas.drawArc(oval, 180f, 180f, false, trackPaint)
 
-            // Gradient arc: GREEN (left/180°) → YELLOW (top/270°) → RED (right/360°)
-            // Draw in segments for smooth color transition
+            // Gradient arc aligned with traffic thresholds:
+            //   GREEN zone: left 30% (ratio 1.0–1.15)
+            //   YELLOW zone: middle 40% (ratio 1.15–1.35)
+            //   RED zone: right 30% (ratio 1.35–1.5)
+            val tGreen = 0.30f   // = (THRESHOLD_GREEN-1)/(maxRatio-1) = 0.15/0.5
+            val tYellow = 0.70f  // = (THRESHOLD_YELLOW-1)/(maxRatio-1) = 0.35/0.5
             val segments = 60
             val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = strokeW
                 strokeCap = Paint.Cap.BUTT
             }
-            val segSweep = 180f / segments + 0.5f  // slight overlap prevents gaps
+            val segSweep = 180f / segments + 0.5f
             for (i in 0 until segments) {
-                val t = i.toFloat() / (segments - 1)  // 0.0=left/GREEN, 1.0=right/RED
+                val t = i.toFloat() / (segments - 1)
                 arcPaint.color = when {
-                    t < 0.5f -> interpolateColor(
-                        Color.parseColor("#4CAF50"),   // Green (left)
-                        Color.parseColor("#FFC107"),   // Yellow (middle)
-                        t * 2f
+                    t < tGreen -> Color.parseColor("#4CAF50")  // pure green
+                    t < (tGreen + tYellow) / 2f -> interpolateColor(
+                        Color.parseColor("#4CAF50"),
+                        Color.parseColor("#FFC107"),
+                        (t - tGreen) / ((tGreen + tYellow) / 2f - tGreen)
                     )
-                    else -> interpolateColor(
-                        Color.parseColor("#FFC107"),   // Yellow
-                        Color.parseColor("#F44336"),   // Red (right)
-                        (t - 0.5f) * 2f
+                    t < tYellow -> interpolateColor(
+                        Color.parseColor("#FFC107"),
+                        Color.parseColor("#F44336"),
+                        (t - (tGreen + tYellow) / 2f) / (tYellow - (tGreen + tYellow) / 2f)
                     )
+                    else -> Color.parseColor("#F44336")  // pure red
                 }
                 val startAngle = 180f + t * 180f
                 canvas.drawArc(oval, startAngle, segSweep, false, arcPaint)
             }
 
-            // Needle: fraction=0 (good) → left (GREEN, 180°), fraction=1 (bad) → right (RED, 0°)
-            val maxRatio = 2.0f
+            // Needle: maxRatio=1.5 so moderate traffic lands visually in yellow zone
+            val maxRatio = 1.5f
             val fraction = ((ratio - 1f) / (maxRatio - 1f)).coerceIn(0f, 1f)
             val needleAngleRad = Math.toRadians(((1.0 - fraction) * 180.0))
             val needleLen = radius - 12f
             val nx = (cx + needleLen * cos(needleAngleRad)).toFloat()
             val ny = (cy - needleLen * sin(needleAngleRad)).toFloat()
 
+            // Needle color matches its position on the arc
+            val needleColor = when {
+                fraction < tGreen -> Color.parseColor("#4CAF50")
+                fraction < tYellow -> interpolateColor(
+                    Color.parseColor("#FFC107"),
+                    Color.parseColor("#FF5722"),
+                    (fraction - tGreen) / (tYellow - tGreen)
+                )
+                else -> Color.parseColor("#F44336")
+            }
             val needlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
-                strokeWidth = 4f
+                color = needleColor
+                strokeWidth = 5f
                 style = Paint.Style.STROKE
                 strokeCap = Paint.Cap.ROUND
             }
