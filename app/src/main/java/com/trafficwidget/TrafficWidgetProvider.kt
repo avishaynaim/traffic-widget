@@ -35,11 +35,13 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         super.onEnabled(context)
         initializeDefaults(context)
         scheduleTrafficCheck(context)
+        TrafficCheckWorker.enqueueNow(context)  // starts the 30s chain
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        TrafficCheckWorker.cancelChain(context)
     }
 
     override fun onReceive(context: Context, intent: Intent) {

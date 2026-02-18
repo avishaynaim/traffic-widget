@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.work.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -12,6 +14,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 
 class TrafficCheckWorker(
     private val context: Context,
@@ -68,27 +71,16 @@ class TrafficCheckWorker(
                     originLat = workLat; originLng = workLng; destLat = homeLat; destLng = homeLng
                 }
 
-                // GPS mode: override origin with current device location
+                // GPS mode: override origin with fresh device location
                 val useGps = prefs.getBoolean(TrafficWidgetProvider.KEY_USE_GPS, false)
                 var finalOriginLat = originLat
                 var finalOriginLng = originLng
                 if (useGps) {
-                    val hasPerm = context.checkSelfPermission(
-                        android.Manifest.permission.ACCESS_COARSE_LOCATION
-                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    if (hasPerm) {
-                        try {
-                            val lm = context.getSystemService(Context.LOCATION_SERVICE)
-                                as android.location.LocationManager
-                            @Suppress("MissingPermission")
-                            val loc = lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
-                                ?: lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
-                            if (loc != null) {
-                                finalOriginLat = loc.latitude.toString()
-                                finalOriginLng = loc.longitude.toString()
-                                Log.i(TAG, "GPS origin: $finalOriginLat, $finalOriginLng")
-                            }
-                        } catch (e: Exception) { Log.e(TAG, "GPS location error", e) }
+                    val loc = getLocation()
+                    if (loc != null) {
+                        finalOriginLat = loc.first.toString()
+                        finalOriginLng = loc.second.toString()
+                        Log.i(TAG, "GPS origin: $finalOriginLat, $finalOriginLng")
                     }
                 }
 
@@ -147,6 +139,7 @@ class TrafficCheckWorker(
                 }
 
                 TrafficWidgetProvider.updateAllWidgets(context)
+                scheduleNextRefresh()
                 Result.success()
 
             } catch (e: Exception) {
@@ -160,9 +153,75 @@ class TrafficCheckWorker(
                 prefs.edit().putString(TrafficWidgetProvider.KEY_LAST_ERROR, msg)
                     .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis()).apply()
                 TrafficWidgetProvider.updateAllWidgets(context)
+                scheduleNextRefresh()
                 Result.retry()
             }
         }
+    }
+
+    /** Schedule the next refresh 30 seconds from now (self-perpetuating chain). */
+    private fun scheduleNextRefresh() {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            CHAIN_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<TrafficCheckWorker>()
+                .setInitialDelay(30, TimeUnit.SECONDS)
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .build()
+        )
+    }
+
+    /**
+     * Get the freshest available device location.
+     * Tries last-known first (if < 30s old). Falls back to requesting
+     * a single fresh fix with an 8-second timeout.
+     */
+    @Suppress("MissingPermission")
+    private suspend fun getLocation(): Pair<Double, Double>? {
+        val hasPerm = context.checkSelfPermission(
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!hasPerm) return null
+
+        val lm = context.getSystemService(Context.LOCATION_SERVICE)
+            as android.location.LocationManager
+
+        // Pick the freshest last-known between network and GPS providers
+        val network = try { lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER) } catch (e: Exception) { null }
+        val gps    = try { lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER) }     catch (e: Exception) { null }
+        val best = listOfNotNull(network, gps).maxByOrNull { it.time }
+
+        if (best != null && System.currentTimeMillis() - best.time < 30_000L) {
+            return Pair(best.latitude, best.longitude)   // fresh enough
+        }
+
+        // Request a single fresh fix (timeout 8 s)
+        return withTimeoutOrNull(8_000L) {
+            suspendCancellableCoroutine { cont ->
+                val listener = object : android.location.LocationListener {
+                    override fun onLocationChanged(loc: android.location.Location) {
+                        try { lm.removeUpdates(this) } catch (e: Exception) {}
+                        if (cont.isActive) cont.resume(Pair(loc.latitude, loc.longitude))
+                    }
+                    override fun onProviderDisabled(p: String) {}
+                }
+                try {
+                    lm.requestLocationUpdates(
+                        android.location.LocationManager.NETWORK_PROVIDER,
+                        0L, 0f, listener, android.os.Looper.getMainLooper()
+                    )
+                    cont.invokeOnCancellation { try { lm.removeUpdates(listener) } catch (e: Exception) {} }
+                } catch (e: Exception) {
+                    Log.e(TAG, "requestLocationUpdates failed", e)
+                    // Fall back to best stale fix
+                    if (cont.isActive) cont.resume(best?.let { Pair(it.latitude, it.longitude) })
+                }
+            }
+        } ?: best?.let { Pair(it.latitude, it.longitude) }  // timeout → use stale if available
     }
 
     private suspend fun geocodeAddress(address: String, apiKey: String): Pair<Double, Double>? {
@@ -298,13 +357,19 @@ class TrafficCheckWorker(
 
     companion object {
         private const val TAG = "TrafficCheckWorker"
+        const val CHAIN_WORK_NAME = "traffic_auto_chain"
 
         fun enqueueNow(context: Context) {
+            // Immediate run + restart the 30-second chain
             WorkManager.getInstance(context).enqueue(
                 OneTimeWorkRequestBuilder<TrafficCheckWorker>()
                     .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                     .build()
             )
+        }
+
+        fun cancelChain(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(CHAIN_WORK_NAME)
         }
     }
 }
