@@ -68,7 +68,31 @@ class TrafficCheckWorker(
                     originLat = workLat; originLng = workLng; destLat = homeLat; destLng = homeLng
                 }
 
-                if (apiKey.isNullOrEmpty() || originLat.isNullOrEmpty() || originLng.isNullOrEmpty()
+                // GPS mode: override origin with current device location
+                val useGps = prefs.getBoolean(TrafficWidgetProvider.KEY_USE_GPS, false)
+                var finalOriginLat = originLat
+                var finalOriginLng = originLng
+                if (useGps) {
+                    val hasPerm = context.checkSelfPermission(
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (hasPerm) {
+                        try {
+                            val lm = context.getSystemService(Context.LOCATION_SERVICE)
+                                as android.location.LocationManager
+                            @Suppress("MissingPermission")
+                            val loc = lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+                                ?: lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+                            if (loc != null) {
+                                finalOriginLat = loc.latitude.toString()
+                                finalOriginLng = loc.longitude.toString()
+                                Log.i(TAG, "GPS origin: $finalOriginLat, $finalOriginLng")
+                            }
+                        } catch (e: Exception) { Log.e(TAG, "GPS location error", e) }
+                    }
+                }
+
+                if (apiKey.isNullOrEmpty() || finalOriginLat.isNullOrEmpty() || finalOriginLng.isNullOrEmpty()
                     || destLat.isNullOrEmpty() || destLng.isNullOrEmpty()) {
                     val msg = when {
                         apiKey.isNullOrEmpty() -> "API key not configured"
@@ -82,7 +106,7 @@ class TrafficCheckWorker(
                     return@withContext Result.success()
                 }
 
-                val result = fetchTrafficData(apiKey, originLat.toDouble(), originLng.toDouble(),
+                val result = fetchTrafficData(apiKey, finalOriginLat.toDouble(), finalOriginLng.toDouble(),
                     destLat.toDouble(), destLng.toDouble())
 
                 if (result != null) {
@@ -115,7 +139,7 @@ class TrafficCheckWorker(
                     // Download and save static map image
                     downloadRouteMap(
                         apiKey = apiKey,
-                        originLat = originLat.toDouble(), originLng = originLng.toDouble(),
+                        originLat = finalOriginLat.toDouble(), originLng = finalOriginLng.toDouble(),
                         destLat = destLat.toDouble(), destLng = destLng.toDouble(),
                         primaryPolyline = primary.polyline,
                         altPolyline = alt?.polyline

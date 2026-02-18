@@ -49,6 +49,30 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             ACTION_REFRESH -> {
                 TrafficCheckWorker.enqueueNow(context)
             }
+            ACTION_TOGGLE_GPS -> {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val current = prefs.getBoolean(KEY_USE_GPS, false)
+                if (!current) {
+                    // Turning GPS on — check permission
+                    val hasPerm = context.checkSelfPermission(
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (!hasPerm) {
+                        prefs.edit().putString(KEY_LAST_ERROR, "Grant location permission in Settings").apply()
+                        updateAllWidgets(context)
+                        return
+                    }
+                }
+                prefs.edit().putBoolean(KEY_USE_GPS, !current).apply()
+                TrafficCheckWorker.enqueueNow(context)
+                updateAllWidgets(context)
+            }
+            ACTION_TOGGLE_ROUTE -> {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val current = prefs.getBoolean(KEY_SHOW_ALT, false)
+                prefs.edit().putBoolean(KEY_SHOW_ALT, !current).apply()
+                updateAllWidgets(context)
+            }
             ACTION_OPEN_WAZE -> {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val direction = prefs.getInt(KEY_DIRECTION, DIRECTION_TO_HOME)
@@ -137,7 +161,12 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val ACTION_REFRESH = "com.trafficwidget.ACTION_REFRESH"
         const val ACTION_OPEN_WAZE = "com.trafficwidget.ACTION_OPEN_WAZE"
         const val ACTION_TOGGLE_DIRECTION = "com.trafficwidget.ACTION_TOGGLE_DIRECTION"
+        const val ACTION_TOGGLE_GPS = "com.trafficwidget.ACTION_TOGGLE_GPS"
+        const val ACTION_TOGGLE_ROUTE = "com.trafficwidget.ACTION_TOGGLE_ROUTE"
         const val WORK_NAME = "traffic_check_work"
+
+        const val KEY_USE_GPS = "use_gps"
+        const val KEY_SHOW_ALT = "show_alt"
 
         // Traffic status thresholds (ratio of traffic time to normal time)
         const val THRESHOLD_GREEN = 1.15f   // < 15% slower = green
@@ -167,6 +196,14 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.directionButton, PendingIntent.getBroadcast(
                 context, 3, toggleIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
 
+            val gpsIntent = Intent(context, TrafficWidgetProvider::class.java).apply { action = ACTION_TOGGLE_GPS }
+            views.setOnClickPendingIntent(R.id.gpsButton, PendingIntent.getBroadcast(
+                context, 4, gpsIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+
+            val routeToggleIntent = Intent(context, TrafficWidgetProvider::class.java).apply { action = ACTION_TOGGLE_ROUTE }
+            views.setOnClickPendingIntent(R.id.altRouteInfo, PendingIntent.getBroadcast(
+                context, 5, routeToggleIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+
             // Load data and update display
             try {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -176,10 +213,17 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 val lastUpdate = prefs.getLong(KEY_LAST_UPDATE, 0)
                 val lastError = prefs.getString(KEY_LAST_ERROR, null)
                 val direction = prefs.getInt(KEY_DIRECTION, DIRECTION_TO_HOME)
+                val useGps = prefs.getBoolean(KEY_USE_GPS, false)
+                val showAlt = prefs.getBoolean(KEY_SHOW_ALT, false)
 
-                // Direction button label
+                // GPS button: green tint when active
+                views.setInt(R.id.gpsButton, "setBackgroundColor",
+                    if (useGps) Color.parseColor("#CC00AA44") else Color.parseColor("#55FFFFFF"))
+
+                // Direction button label — show 📍 prefix when GPS mode is on
+                val destLabel = if (direction == DIRECTION_TO_WORK) "🏢 Work" else "🏠 Home"
                 views.setTextViewText(R.id.directionButton,
-                    if (direction == DIRECTION_TO_WORK) "→🏢 To Work" else "→🏠 To Home")
+                    if (useGps) "📍→$destLabel" else "→$destLabel")
 
                 // Status label
                 val status = TrafficStatus.values()[trafficStatus]
@@ -211,26 +255,38 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 }
 
                 // Travel time or error
+                val altDurationTraffic = prefs.getInt(KEY_LAST_ALT_DURATION_TRAFFIC, 0)
+                val altDuration = prefs.getInt(KEY_LAST_ALT_DURATION, altDurationTraffic)
                 if (!lastError.isNullOrEmpty()) {
                     views.setTextViewText(R.id.travelTime, "Error")
                     views.setTextViewText(R.id.delayInfo, lastError)
                     views.setTextViewText(R.id.altRouteInfo, "")
                 } else if (durationTraffic > 0) {
-                    val minutes = durationTraffic / 60
-                    views.setTextViewText(R.id.travelTime, "${minutes} min")
-                    val delay = (durationTraffic - duration) / 60
-                    views.setTextViewText(R.id.delayInfo,
-                        if (delay > 0) "+${delay} min delay" else "No delay")
-
-                    // Alt route info
-                    val altDurationTraffic = prefs.getInt(KEY_LAST_ALT_DURATION_TRAFFIC, 0)
-                    if (altDurationTraffic > 0) {
+                    if (showAlt && altDurationTraffic > 0) {
+                        // Showing alt route in info panel
                         val altMin = altDurationTraffic / 60
-                        val altDelay = (altDurationTraffic - prefs.getInt(KEY_LAST_ALT_DURATION, altDurationTraffic)) / 60
-                        val altDelayStr = if (altDelay > 0) " +${altDelay}m" else ""
-                        views.setTextViewText(R.id.altRouteInfo, "Alt: ${altMin} min${altDelayStr}")
+                        val altDelay = (altDurationTraffic - altDuration) / 60
+                        views.setTextViewText(R.id.statusLabel, "Alt Route")
+                        views.setTextViewText(R.id.travelTime, "${altMin} min")
+                        views.setTextViewText(R.id.delayInfo,
+                            if (altDelay > 0) "+${altDelay} min delay" else "No delay")
+                        val mainMin = durationTraffic / 60
+                        views.setTextViewText(R.id.altRouteInfo, "← Main: ${mainMin} min (tap)")
                     } else {
-                        views.setTextViewText(R.id.altRouteInfo, "No alt route")
+                        // Showing primary route in info panel
+                        val minutes = durationTraffic / 60
+                        views.setTextViewText(R.id.travelTime, "${minutes} min")
+                        val delay = (durationTraffic - duration) / 60
+                        views.setTextViewText(R.id.delayInfo,
+                            if (delay > 0) "+${delay} min delay" else "No delay")
+                        if (altDurationTraffic > 0) {
+                            val altMin = altDurationTraffic / 60
+                            val altDelay = (altDurationTraffic - altDuration) / 60
+                            val altDelayStr = if (altDelay > 0) " +${altDelay}m" else ""
+                            views.setTextViewText(R.id.altRouteInfo, "Alt: ${altMin} min${altDelayStr} (tap)")
+                        } else {
+                            views.setTextViewText(R.id.altRouteInfo, "No alt route")
+                        }
                     }
                 } else {
                     views.setTextViewText(R.id.travelTime, "-- min")
