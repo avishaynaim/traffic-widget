@@ -144,6 +144,26 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int
         ) {
+            val views = RemoteViews(context.packageName, R.layout.widget_traffic)
+
+            // Always set click handlers first — before any code that could throw
+            val refreshIntent = Intent(context, TrafficWidgetProvider::class.java).apply { action = ACTION_REFRESH }
+            views.setOnClickPendingIntent(R.id.refreshButton, PendingIntent.getBroadcast(
+                context, 0, refreshIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+
+            val wazeIntent = Intent(context, TrafficWidgetProvider::class.java).apply { action = ACTION_OPEN_WAZE }
+            views.setOnClickPendingIntent(R.id.gaugeContainer, PendingIntent.getBroadcast(
+                context, 1, wazeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+
+            val configIntent = Intent(context, ConfigActivity::class.java)
+            views.setOnClickPendingIntent(R.id.settingsButton, PendingIntent.getActivity(
+                context, 2, configIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+
+            val toggleIntent = Intent(context, TrafficWidgetProvider::class.java).apply { action = ACTION_TOGGLE_DIRECTION }
+            views.setOnClickPendingIntent(R.id.directionButton, PendingIntent.getBroadcast(
+                context, 3, toggleIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+
+            // Load data and update display
             try {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val trafficStatus = prefs.getInt(KEY_LAST_TRAFFIC_STATUS, TrafficStatus.UNKNOWN.ordinal)
@@ -153,29 +173,27 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 val lastError = prefs.getString(KEY_LAST_ERROR, null)
                 val direction = prefs.getInt(KEY_DIRECTION, DIRECTION_TO_HOME)
 
-                val views = RemoteViews(context.packageName, R.layout.widget_traffic)
-
                 // Direction button label
-                val dirLabel = if (direction == DIRECTION_TO_WORK) "→🏢 To Work" else "→🏠 To Home"
-                views.setTextViewText(R.id.directionButton, dirLabel)
+                views.setTextViewText(R.id.directionButton,
+                    if (direction == DIRECTION_TO_WORK) "→🏢 To Work" else "→🏠 To Home")
 
                 // Status label
                 val status = TrafficStatus.values()[trafficStatus]
-                val label = when (status) {
+                views.setTextViewText(R.id.statusLabel, when (status) {
                     TrafficStatus.GREEN -> "Clear"
                     TrafficStatus.YELLOW -> "Moderate"
                     TrafficStatus.RED -> "Heavy"
                     TrafficStatus.UNKNOWN -> "Unknown"
-                }
-                views.setTextViewText(R.id.statusLabel, label)
+                })
 
-                // Gauge bitmap: ratio of traffic time to normal time
-                val ratio = if (duration > 0 && durationTraffic > 0)
-                    durationTraffic.toFloat() / duration.toFloat()
-                else
-                    1.0f
-                val gaugeBitmap = createGaugeBitmap(ratio)
-                views.setImageViewBitmap(R.id.gaugeImage, gaugeBitmap)
+                // Gauge bitmap — own try/catch so a failure here never breaks the buttons
+                try {
+                    val ratio = if (duration > 0 && durationTraffic > 0)
+                        durationTraffic.toFloat() / duration.toFloat() else 1.0f
+                    views.setImageViewBitmap(R.id.gaugeImage, createGaugeBitmap(ratio))
+                } catch (e: Exception) {
+                    android.util.Log.e("TrafficWidget", "Gauge bitmap error", e)
+                }
 
                 // Travel time or error
                 if (!lastError.isNullOrEmpty()) {
@@ -185,11 +203,8 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                     val minutes = durationTraffic / 60
                     views.setTextViewText(R.id.travelTime, "${minutes} min")
                     val delay = (durationTraffic - duration) / 60
-                    if (delay > 0) {
-                        views.setTextViewText(R.id.delayInfo, "+${delay} min delay")
-                    } else {
-                        views.setTextViewText(R.id.delayInfo, "No delay")
-                    }
+                    views.setTextViewText(R.id.delayInfo,
+                        if (delay > 0) "+${delay} min delay" else "No delay")
                 } else {
                     views.setTextViewText(R.id.travelTime, "-- min")
                     views.setTextViewText(R.id.delayInfo, "Tap to configure")
@@ -200,58 +215,15 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                     val ago = (System.currentTimeMillis() - lastUpdate) / 60000
                     views.setTextViewText(R.id.lastUpdate, "Updated ${ago}m ago")
                 }
-
-                // Click: refresh button
-                val refreshIntent = Intent(context, TrafficWidgetProvider::class.java).apply {
-                    action = ACTION_REFRESH
-                }
-                val refreshPending = PendingIntent.getBroadcast(
-                    context, 0, refreshIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                views.setOnClickPendingIntent(R.id.refreshButton, refreshPending)
-
-                // Click: gauge area opens navigation
-                val wazeIntent = Intent(context, TrafficWidgetProvider::class.java).apply {
-                    action = ACTION_OPEN_WAZE
-                }
-                val wazePending = PendingIntent.getBroadcast(
-                    context, 1, wazeIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                views.setOnClickPendingIntent(R.id.gaugeContainer, wazePending)
-
-                // Click: settings button
-                val configIntent = Intent(context, ConfigActivity::class.java)
-                val configPending = PendingIntent.getActivity(
-                    context, 2, configIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                views.setOnClickPendingIntent(R.id.settingsButton, configPending)
-
-                // Click: direction toggle button
-                val toggleIntent = Intent(context, TrafficWidgetProvider::class.java).apply {
-                    action = ACTION_TOGGLE_DIRECTION
-                }
-                val togglePending = PendingIntent.getBroadcast(
-                    context, 3, toggleIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                views.setOnClickPendingIntent(R.id.directionButton, togglePending)
-
-                appWidgetManager.updateAppWidget(appWidgetId, views)
             } catch (e: Exception) {
-                android.util.Log.e("TrafficWidget", "Error updating widget", e)
-                try {
-                    val errorViews = RemoteViews(context.packageName, R.layout.widget_traffic)
-                    errorViews.setTextViewText(R.id.statusLabel, "Error")
-                    errorViews.setTextViewText(R.id.travelTime, "!")
-                    errorViews.setTextViewText(R.id.delayInfo, "Tap settings to configure")
-                    appWidgetManager.updateAppWidget(appWidgetId, errorViews)
-                } catch (e2: Exception) {
-                    android.util.Log.e("TrafficWidget", "Failed to show error view", e2)
-                }
+                android.util.Log.e("TrafficWidget", "Error updating widget display", e)
+                views.setTextViewText(R.id.statusLabel, "Error")
+                views.setTextViewText(R.id.travelTime, "!")
+                views.setTextViewText(R.id.delayInfo, "Tap ⚙️ to configure")
             }
+
+            // Always apply — buttons are set regardless of any errors above
+            appWidgetManager.updateAppWidget(appWidgetId, views)
         }
 
         fun updateAllWidgets(context: Context) {
