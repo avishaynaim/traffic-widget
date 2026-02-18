@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -123,9 +124,12 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val KEY_LAST_TRAFFIC_STATUS = "last_traffic_status"
         const val KEY_LAST_DURATION = "last_duration"
         const val KEY_LAST_DURATION_TRAFFIC = "last_duration_traffic"
+        const val KEY_LAST_ALT_DURATION = "last_alt_duration"
+        const val KEY_LAST_ALT_DURATION_TRAFFIC = "last_alt_duration_traffic"
         const val KEY_LAST_UPDATE = "last_update"
         const val KEY_LAST_ERROR = "last_error"
         const val KEY_DIRECTION = "direction"
+        const val MAP_FILE_NAME = "route_map.png"
 
         const val DIRECTION_TO_HOME = 0
         const val DIRECTION_TO_WORK = 1
@@ -186,6 +190,17 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                     TrafficStatus.UNKNOWN -> "Unknown"
                 })
 
+                // Route map image — load from file saved by TrafficCheckWorker
+                try {
+                    val mapFile = java.io.File(context.filesDir, MAP_FILE_NAME)
+                    if (mapFile.exists()) {
+                        val mapBitmap = BitmapFactory.decodeFile(mapFile.absolutePath)
+                        if (mapBitmap != null) views.setImageViewBitmap(R.id.mapImage, mapBitmap)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("TrafficWidget", "Map image error", e)
+                }
+
                 // Gauge bitmap — own try/catch so a failure here never breaks the buttons
                 try {
                     val ratio = if (duration > 0 && durationTraffic > 0)
@@ -199,15 +214,28 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 if (!lastError.isNullOrEmpty()) {
                     views.setTextViewText(R.id.travelTime, "Error")
                     views.setTextViewText(R.id.delayInfo, lastError)
+                    views.setTextViewText(R.id.altRouteInfo, "")
                 } else if (durationTraffic > 0) {
                     val minutes = durationTraffic / 60
                     views.setTextViewText(R.id.travelTime, "${minutes} min")
                     val delay = (durationTraffic - duration) / 60
                     views.setTextViewText(R.id.delayInfo,
                         if (delay > 0) "+${delay} min delay" else "No delay")
+
+                    // Alt route info
+                    val altDurationTraffic = prefs.getInt(KEY_LAST_ALT_DURATION_TRAFFIC, 0)
+                    if (altDurationTraffic > 0) {
+                        val altMin = altDurationTraffic / 60
+                        val altDelay = (altDurationTraffic - prefs.getInt(KEY_LAST_ALT_DURATION, altDurationTraffic)) / 60
+                        val altDelayStr = if (altDelay > 0) " +${altDelay}m" else ""
+                        views.setTextViewText(R.id.altRouteInfo, "Alt: ${altMin} min${altDelayStr}")
+                    } else {
+                        views.setTextViewText(R.id.altRouteInfo, "")
+                    }
                 } else {
                     views.setTextViewText(R.id.travelTime, "-- min")
                     views.setTextViewText(R.id.delayInfo, "Tap to configure")
+                    views.setTextViewText(R.id.altRouteInfo, "")
                 }
 
                 // Last update time
