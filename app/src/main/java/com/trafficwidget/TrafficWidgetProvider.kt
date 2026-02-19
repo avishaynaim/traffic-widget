@@ -149,9 +149,9 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val KEY_WORK_LNG = "work_lng"
         const val KEY_WORK_ADDRESS = "work_address"
         const val KEY_API_KEY = "google_api_key"
-        const val DEFAULT_API_KEY = "AIzaSyALvbBxcZQpHExPUiL4uUvfU4JfbxqjANI"
-        const val DEFAULT_HOME_ADDRESS = "Bar Kochva, Rehovot"
-        const val DEFAULT_WORK_ADDRESS = "Dizengof, Beer Yaakov"
+        const val DEFAULT_API_KEY = ""
+        const val DEFAULT_HOME_ADDRESS = ""
+        const val DEFAULT_WORK_ADDRESS = ""
         const val KEY_LAST_TRAFFIC_STATUS = "last_traffic_status"
         const val KEY_LAST_DURATION = "last_duration"
         const val KEY_LAST_DURATION_TRAFFIC = "last_duration_traffic"
@@ -176,6 +176,8 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val KEY_SHOW_ALT = "show_alt"
         const val KEY_GPS_LAT = "gps_lat"
         const val KEY_GPS_LNG = "gps_lng"
+        const val KEY_LAST_MAP_DOWNLOAD = "last_map_download"
+        const val MAP_DOWNLOAD_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
 
         const val ALARM_INTERVAL_MS = 30_000L  // 30 seconds
 

@@ -133,31 +133,32 @@ class TrafficCheckWorker(
                     fastestPrimary
                 } else null
 
-                if (true) {
-                    val ratio = primary.durationInTraffic.toFloat() / primary.duration.toFloat()
-                    val status = when {
-                        ratio < TrafficWidgetProvider.THRESHOLD_GREEN -> TrafficStatus.GREEN
-                        ratio < TrafficWidgetProvider.THRESHOLD_YELLOW -> TrafficStatus.YELLOW
-                        else -> TrafficStatus.RED
-                    }
+                val ratio = primary.durationInTraffic.toFloat() / primary.duration.toFloat()
+                val status = when {
+                    ratio < TrafficWidgetProvider.THRESHOLD_GREEN -> TrafficStatus.GREEN
+                    ratio < TrafficWidgetProvider.THRESHOLD_YELLOW -> TrafficStatus.YELLOW
+                    else -> TrafficStatus.RED
+                }
 
-                    val editor = prefs.edit()
-                        .putInt(TrafficWidgetProvider.KEY_LAST_TRAFFIC_STATUS, status.ordinal)
-                        .putInt(TrafficWidgetProvider.KEY_LAST_DURATION, primary.duration)
-                        .putInt(TrafficWidgetProvider.KEY_LAST_DURATION_TRAFFIC, primary.durationInTraffic)
-                        .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
-                        .remove(TrafficWidgetProvider.KEY_LAST_ERROR)
+                val editor = prefs.edit()
+                    .putInt(TrafficWidgetProvider.KEY_LAST_TRAFFIC_STATUS, status.ordinal)
+                    .putInt(TrafficWidgetProvider.KEY_LAST_DURATION, primary.duration)
+                    .putInt(TrafficWidgetProvider.KEY_LAST_DURATION_TRAFFIC, primary.durationInTraffic)
+                    .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis())
+                    .remove(TrafficWidgetProvider.KEY_LAST_ERROR)
 
-                    if (altRoute != null) {
-                        editor.putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION, altRoute.duration)
-                              .putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION_TRAFFIC, altRoute.durationInTraffic)
-                    } else {
-                        editor.putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION, 0)
-                              .putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION_TRAFFIC, 0)
-                    }
-                    editor.apply()
+                if (altRoute != null) {
+                    editor.putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION, altRoute.duration)
+                          .putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION_TRAFFIC, altRoute.durationInTraffic)
+                } else {
+                    editor.putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION, 0)
+                          .putInt(TrafficWidgetProvider.KEY_LAST_ALT_DURATION_TRAFFIC, 0)
+                }
+                editor.apply()
 
-                    // Download and save static map image
+                // Download map only every 5 minutes — route doesn't change every 30 seconds
+                val lastMapDownload = prefs.getLong(KEY_LAST_MAP_DOWNLOAD, 0)
+                if (System.currentTimeMillis() - lastMapDownload > MAP_DOWNLOAD_INTERVAL_MS) {
                     downloadRouteMap(
                         apiKey = apiKey,
                         originLat = oLat, originLng = oLng,
@@ -165,6 +166,7 @@ class TrafficCheckWorker(
                         primaryPolyline = primary.polyline,
                         altPolyline = altRoute?.polyline
                     )
+                    prefs.edit().putLong(KEY_LAST_MAP_DOWNLOAD, System.currentTimeMillis()).apply()
                 }
 
                 TrafficWidgetProvider.updateAllWidgets(context)
@@ -393,10 +395,14 @@ class TrafficCheckWorker(
     companion object {
         private const val TAG = "TrafficCheckWorker"
         const val CHAIN_WORK_NAME = "traffic_auto_chain"
+        const val IMMEDIATE_WORK_NAME = "traffic_immediate"
 
         fun enqueueNow(context: Context) {
-            // No constraints — run immediately when called. Worker handles no-network gracefully.
-            WorkManager.getInstance(context).enqueue(
+            // REPLACE prevents pileup: if alarm fires every 30s but API takes 15s,
+            // we don't want a queue of pending workers stacking up.
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                IMMEDIATE_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
                 OneTimeWorkRequestBuilder<TrafficCheckWorker>()
                     .build()
             )
@@ -404,6 +410,7 @@ class TrafficCheckWorker(
 
         fun cancelChain(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(CHAIN_WORK_NAME)
+            WorkManager.getInstance(context).cancelUniqueWork(IMMEDIATE_WORK_NAME)
         }
     }
 }
