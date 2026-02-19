@@ -395,10 +395,9 @@ class TrafficCheckWorker(
         const val CHAIN_WORK_NAME = "traffic_auto_chain"
 
         fun enqueueNow(context: Context) {
-            // Immediate run + restart the 30-second chain
+            // No constraints — run immediately when called. Worker handles no-network gracefully.
             WorkManager.getInstance(context).enqueue(
                 OneTimeWorkRequestBuilder<TrafficCheckWorker>()
-                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                     .build()
             )
         }

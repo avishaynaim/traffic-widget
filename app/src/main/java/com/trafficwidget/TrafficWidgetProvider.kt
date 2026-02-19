@@ -29,7 +29,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             updateWidget(context, appWidgetManager, appWidgetId)
         }
         scheduleTrafficCheck(context)
-        scheduleAlarm(context)
+        scheduleNextAlarm(context)
         TrafficCheckWorker.enqueueNow(context)  // fetch fresh ETA, map, and routes on every system update
     }
 
@@ -37,7 +37,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         super.onEnabled(context)
         initializeDefaults(context)
         scheduleTrafficCheck(context)
-        scheduleAlarm(context)
+        scheduleNextAlarm(context)
         TrafficCheckWorker.enqueueNow(context)
     }
 
@@ -54,6 +54,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             ACTION_REFRESH -> {
                 TrafficCheckWorker.enqueueNow(context)
+                scheduleNextAlarm(context)  // re-chain: next fire in 30s
             }
             ACTION_TOGGLE_GPS -> {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -176,14 +177,17 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val KEY_GPS_LAT = "gps_lat"
         const val KEY_GPS_LNG = "gps_lng"
 
-        const val ALARM_INTERVAL_MS = 15 * 60 * 1000L  // 15 minutes
+        const val ALARM_INTERVAL_MS = 30_000L  // 30 seconds
 
-        fun scheduleAlarm(context: Context) {
+        // Chain alarm: schedule a one-shot alarm 30s from now.
+        // ACTION_REFRESH handler reschedules it, creating a self-perpetuating chain.
+        // setExactAndAllowWhileIdle fires even in Doze mode, no extra permission needed.
+        fun scheduleNextAlarm(context: Context) {
             val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-            am.setInexactRepeating(
+            val triggerAt = android.os.SystemClock.elapsedRealtime() + ALARM_INTERVAL_MS
+            am.setExactAndAllowWhileIdle(
                 android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                android.os.SystemClock.elapsedRealtime() + ALARM_INTERVAL_MS,
-                ALARM_INTERVAL_MS,
+                triggerAt,
                 getAlarmPendingIntent(context)
             )
         }

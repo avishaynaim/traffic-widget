@@ -6,9 +6,12 @@ import android.content.Intent
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            TrafficCheckWorker.enqueueNow(context)
-            TrafficWidgetProvider.scheduleAlarm(context)
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                TrafficCheckWorker.enqueueNow(context)
+                TrafficWidgetProvider.scheduleNextAlarm(context)
+            }
         }
     }
 }
