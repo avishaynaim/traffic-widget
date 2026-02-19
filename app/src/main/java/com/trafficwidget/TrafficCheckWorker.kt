@@ -29,7 +29,7 @@ class TrafficCheckWorker(
                 )
 
                 val apiKey = prefs.getString(TrafficWidgetProvider.KEY_API_KEY, TrafficWidgetProvider.DEFAULT_API_KEY)
-                val direction = prefs.getInt(TrafficWidgetProvider.KEY_DIRECTION, TrafficWidgetProvider.DIRECTION_TO_WORK)
+                val direction = prefs.getInt(TrafficWidgetProvider.KEY_DIRECTION, TrafficWidgetProvider.DIRECTION_TO_HOME)
 
                 var homeLat = prefs.getString(TrafficWidgetProvider.KEY_HOME_LAT, null)
                 var homeLng = prefs.getString(TrafficWidgetProvider.KEY_HOME_LNG, null)
