@@ -29,6 +29,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             updateWidget(context, appWidgetManager, appWidgetId)
         }
         scheduleTrafficCheck(context)
+        scheduleAlarm(context)
         TrafficCheckWorker.enqueueNow(context)  // fetch fresh ETA, map, and routes on every system update
     }
 
@@ -36,13 +37,15 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         super.onEnabled(context)
         initializeDefaults(context)
         scheduleTrafficCheck(context)
-        TrafficCheckWorker.enqueueNow(context)  // starts the 30s chain
+        scheduleAlarm(context)
+        TrafficCheckWorker.enqueueNow(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         TrafficCheckWorker.cancelChain(context)
+        cancelAlarm(context)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -172,6 +175,33 @@ class TrafficWidgetProvider : AppWidgetProvider() {
         const val KEY_SHOW_ALT = "show_alt"
         const val KEY_GPS_LAT = "gps_lat"
         const val KEY_GPS_LNG = "gps_lng"
+
+        const val ALARM_INTERVAL_MS = 15 * 60 * 1000L  // 15 minutes
+
+        fun scheduleAlarm(context: Context) {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            am.setInexactRepeating(
+                android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                android.os.SystemClock.elapsedRealtime() + ALARM_INTERVAL_MS,
+                ALARM_INTERVAL_MS,
+                getAlarmPendingIntent(context)
+            )
+        }
+
+        fun cancelAlarm(context: Context) {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            am.cancel(getAlarmPendingIntent(context))
+        }
+
+        private fun getAlarmPendingIntent(context: Context): android.app.PendingIntent {
+            val intent = Intent(context, TrafficWidgetProvider::class.java).apply {
+                action = ACTION_REFRESH
+            }
+            return android.app.PendingIntent.getBroadcast(
+                context, 99, intent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+        }
 
         // Traffic status thresholds (ratio of traffic time to normal time)
         const val THRESHOLD_GREEN = 1.15f   // < 15% slower = green
