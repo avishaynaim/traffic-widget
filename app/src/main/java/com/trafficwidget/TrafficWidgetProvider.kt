@@ -29,6 +29,7 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             updateWidget(context, appWidgetManager, appWidgetId)
         }
         scheduleTrafficCheck(context)
+        TrafficCheckWorker.enqueueNow(context)  // fetch fresh ETA, map, and routes on every system update
     }
 
     override fun onEnabled(context: Context) {

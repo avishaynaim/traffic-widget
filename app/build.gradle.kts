@@ -11,8 +11,8 @@ android {
         applicationId = "com.trafficwidget"
         minSdk = 26
         targetSdk = 34
-        versionCode = 22
-        versionName = "1.0.22"
+        versionCode = 23
+        versionName = "1.0.23"
 
         // API key from local.properties (keep it secret!)
         manifestPlaceholders["MAPS_API_KEY"] = project.findProperty("MAPS_API_KEY") ?: ""
