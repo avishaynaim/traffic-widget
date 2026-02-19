@@ -356,7 +356,7 @@ class TrafficCheckWorker(
     ) = withContext(Dispatchers.IO) {
         try {
             val sb = StringBuilder("https://maps.googleapis.com/maps/api/staticmap?")
-            sb.append("size=320x200")
+            sb.append("size=480x300")
             sb.append("&maptype=roadmap")
 
             // Alt route (drawn first, underneath)

@@ -240,12 +240,11 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 })
 
                 // Route map image — load from file saved by TrafficCheckWorker
-                // Use inSampleSize=2 to halve dimensions, keeping bitmap well under Binder 1MB limit
+                // Map is downloaded at 480x300 (576KB bitmap) which is safely under the 1MB Binder limit
                 try {
                     val mapFile = java.io.File(context.filesDir, MAP_FILE_NAME)
                     if (mapFile.exists()) {
-                        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
-                        val mapBitmap = BitmapFactory.decodeFile(mapFile.absolutePath, opts)
+                        val mapBitmap = BitmapFactory.decodeFile(mapFile.absolutePath)
                         if (mapBitmap != null) views.setImageViewBitmap(R.id.mapImage, mapBitmap)
                     }
                 } catch (e: Exception) {
