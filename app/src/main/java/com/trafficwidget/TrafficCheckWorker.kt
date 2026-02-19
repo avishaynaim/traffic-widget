@@ -109,7 +109,6 @@ class TrafficCheckWorker(
                     prefs.edit().putString(TrafficWidgetProvider.KEY_LAST_ERROR, msg)
                         .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis()).apply()
                     TrafficWidgetProvider.updateAllWidgets(context)
-                    scheduleNextRefresh()
                     return@withContext Result.success()
                 }
 
@@ -125,7 +124,6 @@ class TrafficCheckWorker(
                 // Use no-toll as primary; fastest as alt (only if meaningfully different)
                 val primary = (noTollResult ?: fastestResult)?.primary ?: run {
                     TrafficWidgetProvider.updateAllWidgets(context)
-                    scheduleNextRefresh()
                     return@withContext Result.success()
                 }
                 val fastestPrimary = fastestResult?.primary
@@ -170,7 +168,6 @@ class TrafficCheckWorker(
                 }
 
                 TrafficWidgetProvider.updateAllWidgets(context)
-                scheduleNextRefresh()
                 Result.success()
 
             } catch (e: Exception) {
@@ -184,8 +181,9 @@ class TrafficCheckWorker(
                 prefs.edit().putString(TrafficWidgetProvider.KEY_LAST_ERROR, msg)
                     .putLong(TrafficWidgetProvider.KEY_LAST_UPDATE, System.currentTimeMillis()).apply()
                 TrafficWidgetProvider.updateAllWidgets(context)
-                scheduleNextRefresh()
                 Result.retry()
+            } finally {
+                scheduleNextRefresh()
             }
         }
     }
@@ -358,7 +356,7 @@ class TrafficCheckWorker(
     ) = withContext(Dispatchers.IO) {
         try {
             val sb = StringBuilder("https://maps.googleapis.com/maps/api/staticmap?")
-            sb.append("size=640x400")
+            sb.append("size=320x200")
             sb.append("&maptype=roadmap")
 
             // Alt route (drawn first, underneath)

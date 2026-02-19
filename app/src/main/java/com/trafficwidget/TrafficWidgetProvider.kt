@@ -240,10 +240,12 @@ class TrafficWidgetProvider : AppWidgetProvider() {
                 })
 
                 // Route map image — load from file saved by TrafficCheckWorker
+                // Use inSampleSize=2 to halve dimensions, keeping bitmap well under Binder 1MB limit
                 try {
                     val mapFile = java.io.File(context.filesDir, MAP_FILE_NAME)
                     if (mapFile.exists()) {
-                        val mapBitmap = BitmapFactory.decodeFile(mapFile.absolutePath)
+                        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
+                        val mapBitmap = BitmapFactory.decodeFile(mapFile.absolutePath, opts)
                         if (mapBitmap != null) views.setImageViewBitmap(R.id.mapImage, mapBitmap)
                     }
                 } catch (e: Exception) {
@@ -327,7 +329,11 @@ class TrafficWidgetProvider : AppWidgetProvider() {
             }
 
             // Always apply — buttons are set regardless of any errors above
-            appWidgetManager.updateAppWidget(appWidgetId, views)
+            try {
+                appWidgetManager.updateAppWidget(appWidgetId, views)
+            } catch (e: Exception) {
+                android.util.Log.e("TrafficWidget", "updateAppWidget failed (Binder?)", e)
+            }
         }
 
         fun updateAllWidgets(context: Context) {
