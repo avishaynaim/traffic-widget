@@ -157,8 +157,8 @@ class TrafficCheckWorker(
                 editor.apply()
 
                 // Download map only every 5 minutes — route doesn't change every 30 seconds
-                val lastMapDownload = prefs.getLong(KEY_LAST_MAP_DOWNLOAD, 0)
-                if (System.currentTimeMillis() - lastMapDownload > MAP_DOWNLOAD_INTERVAL_MS) {
+                val lastMapDownload = prefs.getLong(TrafficWidgetProvider.KEY_LAST_MAP_DOWNLOAD, 0)
+                if (System.currentTimeMillis() - lastMapDownload > TrafficWidgetProvider.MAP_DOWNLOAD_INTERVAL_MS) {
                     downloadRouteMap(
                         apiKey = apiKey,
                         originLat = oLat, originLng = oLng,
@@ -166,7 +166,7 @@ class TrafficCheckWorker(
                         primaryPolyline = primary.polyline,
                         altPolyline = altRoute?.polyline
                     )
-                    prefs.edit().putLong(KEY_LAST_MAP_DOWNLOAD, System.currentTimeMillis()).apply()
+                    prefs.edit().putLong(TrafficWidgetProvider.KEY_LAST_MAP_DOWNLOAD, System.currentTimeMillis()).apply()
                 }
 
                 TrafficWidgetProvider.updateAllWidgets(context)
